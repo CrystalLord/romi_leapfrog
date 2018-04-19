@@ -1,6 +1,8 @@
 from E160_robot import *
 from E160_state import *
 from E160_wall import *
+import E160_PF
+
 import serial
 from xbee import XBee
 
@@ -40,13 +42,16 @@ class E160_environment:
                 print("Couldn't find the serial port")
         
         # Setup the robots
+
         self.num_robots = 1
         self.robots = []
-        for i in range (0,self.num_robots):
+        for i in range(self.num_robots):
             # TODO: assign different address to each bot
             r = E160_robot(self, '\x00\x0C', i)
             self.robots.append(r)
-    
+
+        self.pf = E160_PF.E160_PF(self, self.robots)
+
     def update_robots(self, deltaT):
         
         # loop over all robots and update their state

@@ -15,16 +15,14 @@ class E160_robot:
         self.state_est = E160_state()
         self.state_est.set_state(0,0,0)
         self.state_des = E160_state()
-        self.state_des.set_state(0,0,0)
-        # New for lab 4 ------------------------------------------------------
+        self.state_des.set_state(0, 0, 0)
+
+        # Where are we drawing the robot on the GUI?
         self.state_draw = E160_state()
-        self.state_draw.set_state(0,0,0)
         self.state_odo = E160_state()
-        self.state_odo.set_state(0,0,0) # real position for simulation
+        self.state_odo.set_state(0, 0, 0) # real position for simulation
         # --------------------------------------------------------------------
 
-        #self.v = 0.05
-        #self.w = 0.1
         self.R = 0
         self.L = 0
         self.radius = 0.147 / 2
@@ -41,8 +39,9 @@ class E160_robot:
             .replace(microsecond=0)\
             .strftime('%y-%m-%d %H.%M.%S') + '.txt'
         self.make_headers()
+
         self.encoder_resolution = 1440
-        
+
         self.last_encoder_measurements = [0, 0]
         self.encoder_measurements = [0, 0]
         self.range_measurements = [0, 0, 0]
@@ -60,7 +59,8 @@ class E160_robot:
         self.encoder_per_sec_to_rad_per_sec = 10
 
         # New for Lab 4 ------------------------------------------------------
-        self.PF = E160_PF(environment, self.width, self.wheel_radius, self.encoder_resolution)
+        #self.PF = E160_PF(environment, self.width, self.wheel_radius,
+        # self.encoder_resolution)
         # --------------------------------------------------------------------
 
         # For lab 3
@@ -78,7 +78,6 @@ class E160_robot:
                       # [0.0, 0.0, 0.0]]
         self.is_hardcoded = False
 
-        
     def update(self, deltaT):
         # get sensor measurements
         self.encoder_measurements, self.range_measurements =\
@@ -93,19 +92,21 @@ class E160_robot:
 
         # localize with particle filter
         if self.environment.robot_mode == "HARDWARE MODE":
-            self.state_est = self.PF.LocalizeEstWithParticleFilter(
+            self.state_est = self.environment.pf.LocalizeEstWithParticleFilter(
                 self.encoder_measurements,
-                [self.range_measurements[0]])
+                [self.range_measurements[0]],
+                self
+            )
         else:
-            self.state_est = self.PF.LocalizeEstWithParticleFilter(
+            self.state_est = self.environment.pf.LocalizeEstWithParticleFilter(
                 self.encoder_measurements,
-                self.range_measurements)
+                self.range_measurements,
+                self
+            )
 
+        self.last_encoder_measurements = self.encoder_measurements
         # to out put the true location for display purposes only.
         self.state_draw = self.state_odo
-
-        # localize
-        # From lab 3, removed from lab 4
 
         # call motion planner
         #self.motion_planner.update_plan()
@@ -131,7 +132,8 @@ class E160_robot:
             range_measurements = data[:-2]
             
         elif self.environment.robot_mode == "SIMULATION MODE":
-            encoder_measurements = self.simulate_encoders(self.R, self.L, deltaT)
+            encoder_measurements = self.simulate_encoders(self.R, self.L,
+                                                          deltaT)
             # New in lab 4
             range_measurements = []
             for o in self.sensor_orientation:
@@ -178,20 +180,22 @@ class E160_robot:
             robot on path."""
 
         if len(self.points) == 0:
-          return 0,0 
+            return 0,0
         else:
-          self.state_des.x, self.state_des.y, self.state_des.theta = self.points[0]
-          self.point_tracked = False
-          print("go to first point: ", self.state_des.x) 
- 
-          desiredWheelSpeedR, desiredWheelSpeedL = self.point_tracker_control()
-          if self.debug:
-            print("Desired Wheel Speeds:", desiredWheelSpeedR,
-                  desiredWheelSpeedL)
-          if desiredWheelSpeedR == 0 and desiredWheelSpeedL == 0: 
-            self.points = self.points[1:] 
+            self.state_des.x = self.points[0][0]
+            self.state_des.y = self.points[0][1]
+            self.state_des.theta = self.points[0][2]
+            self.point_tracked = False
+            print("go to first point: ", self.state_des.x)
 
-          return desiredWheelSpeedR, desiredWheelSpeedL
+            desiredWheelSpeedR, desiredWheelSpeedL = self.point_tracker_control()
+            if self.debug:
+                print("Desired Wheel Speeds:", desiredWheelSpeedR,
+                    desiredWheelSpeedL)
+            if desiredWheelSpeedR == 0 and desiredWheelSpeedL == 0:
+                self.points = self.points[1:]
+
+        return desiredWheelSpeedR, desiredWheelSpeedL
     
     def point_tracker_control(self):
         """Set desired wheel positions from a given desired point"""
@@ -199,7 +203,7 @@ class E160_robot:
         distGain = 1.5
         rotateGain = 12
         alphaGain = 10
-        betaGain =  -0.5
+        betaGain = -0.5
 
         velNom = 0.4
 
@@ -219,7 +223,6 @@ class E160_robot:
 
         # Get distance to target.
         distTarget = math.sqrt(delx**2 + dely**2)
-        print(distTarget)
         # Is the target point in front or behind the robot?
         dirX = math.cos(curTheta)
         dirY = math.sin(curTheta)
@@ -294,7 +297,7 @@ class E160_robot:
         print("WR:{}, WL:{}".format(desiredWheelSpeedR, desiredWheelSpeedL))
         print("-----------")
 
-        return -desiredWheelSpeedR, -desiredWheelSpeedL
+        return desiredWheelSpeedR, desiredWheelSpeedL
 
     def send_control(self, R, L, deltaT):
         # send to actual robot !!!!!!!!
@@ -313,12 +316,15 @@ class E160_robot:
 
             command = '$M ' + str(LDIR) + ' ' + str(LPWM) + ' ' + str(RDIR) + ' ' + str(RPWM) + '@'
             self.environment.xbee.tx(dest_addr = self.address, data = command)
-            
-    
-    
+
     def simulate_encoders(self, R, L, deltaT):
-        right_encoder_measurement = int(R*self.encoder_per_sec_to_rad_per_sec*deltaT) + self.last_simulated_encoder_R
-        left_encoder_measurement = int(L*self.encoder_per_sec_to_rad_per_sec*deltaT) + self.last_simulated_encoder_L
+        last_r = self.last_simulated_encoder_R
+        last_l = self.last_simulated_encoder_L
+        right_encoder_measurement = -int(
+            R*self.encoder_per_sec_to_rad_per_sec*deltaT) + last_r
+        self.last_simulated_encoder_R
+        left_encoder_measurement = -int(
+            L*self.encoder_per_sec_to_rad_per_sec*deltaT) + last_l
         self.last_simulated_encoder_R = right_encoder_measurement
         self.last_simulated_encoder_L = left_encoder_measurement
 
@@ -326,8 +332,14 @@ class E160_robot:
 
     def simulate_range_finder(self, state, sensorT):
         """Simulate range readings, given a simulated ground truth state"""
-        p = self.PF.Particle(state.x, state.y, state.theta, 0)
-        return self.PF.FindMinWallDistance(p, self.environment.walls, sensorT)
+        p = self.environment.pf.Particle(((state.x, state.y, state.theta),
+                                          (0, 0, 0)), 0)
+        #p = self.PF.Particle(state.x, state.y, state.theta, 0)
+        return self.environment.pf.FindMinWallDistance(
+            p,
+            self.environment.walls,
+            sensorT
+        )
 
     def make_headers(self):
         f = open(self.file_name, 'a+')
@@ -348,9 +360,9 @@ class E160_robot:
                                  self.state_est.y, self.state_est.theta,
                                  self.state_odo.x, self.state_odo.y,
                                  self.state_odo.theta,
-                                 self.PF.particle_weight_sum,
+                                 self.environment.pf.particle_weight_sum,
                                  self.range_measurements[0],
-                                 self.PF.numParticles]]
+                                 self.environment.pf.numParticles]]
         
         f.write(' '.join(data) + '\n')
         f.close()
@@ -380,8 +392,8 @@ class E160_robot:
         diffEncoderR = diffEncoderR if diffEncoderR <= 1000 else 0
 
         # remember for next time
-        self.last_encoder_measurements[0] = encoderL
-        self.last_encoder_measurements[1] = encoderR
+        #self.last_encoder_measurements[0] = encoderL
+        #self.last_encoder_measurements[1] = encoderR
 
         # Calculate distance travelled by each wheel.
         wheelDistanceL = (2*math.pi*diffEncoderL*self.wheel_radius)/self.encoder_resolution

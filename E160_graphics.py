@@ -45,7 +45,7 @@ class E160_graphics:
         
         # add rotation control slider
         self.rotate_control = Scale(self.bottom_frame, from_=-30, to=30,
-                                    length  = 400,label="Rotate Control",
+                                    length = 400,label="Rotate Control",
                                     tickinterval=5, orient=HORIZONTAL)
         self.rotate_control.pack(side=RIGHT)
         
@@ -105,11 +105,9 @@ class E160_graphics:
 
         # initilize particle representation
         self.particles_dot = [self.canvas.create_oval(0,0,0,0, fill ='black')
-                              for x in range(self.environment.robots[0]
-                                             .PF.numParticles)]
+                              for x in range(self.environment.pf.numParticles)]
         self.angles_dots = [self.canvas.create_line(0, 0, 0, 0, fill='green')
-                            for _ in range(self.environment.robots[0]
-                                           .PF.numParticles)]
+                            for _ in range(self.environment.pf.numParticles)]
         self.state_est_particle = self.canvas.create_oval(0, 0, 0, 0,
                                                           fill='black')
         self.sensor_rays = [self.canvas.create_line(0, 0, 0, 0, fill='black')
@@ -183,13 +181,16 @@ class E160_graphics:
     def get_inputs(self):
         pass
 
-    def draw_particles(self, robot):
-        for i in range(robot.PF.numParticles):
-            pf_point = [robot.PF.particles[i].x, robot.PF.particles[i].y]
-            pf_angle = robot.PF.particles[i].heading
-            h = str(hex(int((min(max(robot.PF.particles[i].weight
-                                     *robot.PF.numParticles, 0.0),
-                                      255.0)))))[2:]
+    def draw_particles(self):
+        for i in range(self.environment.pf.numParticles):
+            # TODO: Change this from only showing the first robot
+            pf_point = [self.environment.pf.particles[i].get_x(0),
+                        self.environment.pf.particles[i].get_y(0)]
+            pf_angle = self.environment.pf.particles[i].get_theta(0)
+            #h = str(hex(int((min(max(robot.PF.particles[i].weight
+            #                         *robot.PF.numParticles, 0.0),
+            #                          255.0)))))[2:]
+            h = "ff"
             if len(h) < 2:
                 h += "0"
             color = ('#' + h + "0000")
@@ -286,7 +287,6 @@ class E160_graphics:
         robot.state_des.set_state(desired_points[0],desired_points[1],0)
         print("New desired robot state", robot.state_des.x, robot.state_des.y)
         
-        
     def send_robot_commands(self):
 
         #if self.forward_c != 0:
@@ -298,17 +298,16 @@ class E160_graphics:
         #    self.R = self.turn_c
         #    return
 
-
         # check to see if forward slider has changed
         if abs(self.forward_control.get()-self.last_forward_control) > 0:
             self.rotate_control.set(0)       
-            self.last_forward_control = -self.forward_control.get()
+            self.last_forward_control = self.forward_control.get()
             self.last_rotate_control = 0         
             self.environment.control_mode = "MANUAL CONTROL MODE"
             
             # extract what the R and L motor signals should be
-            self.R = self.forward_control.get()
-            self.L = self.forward_control.get()
+            self.R = -self.forward_control.get()
+            self.L = -self.forward_control.get()
   
         # check to see if rotate slider has changed
         elif abs(self.rotate_control.get()-self.last_rotate_control) > 0:
@@ -363,7 +362,7 @@ class E160_graphics:
             self.draw_robot(r)     
         
         # draw particles
-        self.draw_particles(self.environment.robots[0])
+        self.draw_particles()
 
         self.draw_est(self.environment.robots[0])
         # draw sensors
