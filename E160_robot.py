@@ -46,7 +46,7 @@ class E160_robot:
         self.encoder_measurements = [0, 0]
         self.range_measurements = [0, 0, 0]
         # Orientations of the sensors on the robot
-        self.sensor_orientation = [-math.pi/4, 0, math.pi/4]
+        self.sensor_orientation = [0]#[-math.pi/4, 0, math.pi/4]
         self.last_simulated_encoder_R = 0
         self.last_simulated_encoder_L = 0
         

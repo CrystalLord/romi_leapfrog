@@ -6,11 +6,9 @@ import E160_PF
 import serial
 from xbee import XBee
 
-
 class E160_environment:
-
     
-    def __init__(self):
+    def __init__(self, mode="SIMULATION MODE"):
         #self.width = 2.0
         #self.height = 1.2
         self.width = 6.0
@@ -29,7 +27,7 @@ class E160_environment:
 
         # create vars for hardware vs simulation
         # "SIMULATION MODE" or "HARDWARE MODE"
-        self.robot_mode = "SIMULATION MODE"
+        self.robot_mode = mode
         self.control_mode = "MANUAL CONTROL MODE"
 
         # setup xbee communication

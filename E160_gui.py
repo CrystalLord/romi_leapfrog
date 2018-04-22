@@ -2,14 +2,21 @@
 
 import random
 import time
+import argparse
+
 from E160_environment import *
 from E160_graphics import *
 from pynput.keyboard import Key, Listener
 
 def main():  
-       
+    args = parse_args()
+
+    mode = "SIMULATION MODE"
+    if args.robot:
+        mode = "HARDWARE MODE"
+
     # instantiate robot navigation classes
-    environment = E160_environment()
+    environment = E160_environment(mode)
     graphics = E160_graphics(environment)
 
     #with Listener(on_press=lambda x: on_press(x, graphics),
@@ -29,6 +36,14 @@ def main():
 
         # maintain timing
         time.sleep(deltaT)
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-r",
+                        "--robot",
+                        action="store_true",
+                        help="Turn hardware mode on")
+    return parser.parse_args()
 
 def on_press(key, env):
     if key == Key.right:
