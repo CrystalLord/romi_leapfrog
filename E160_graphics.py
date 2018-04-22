@@ -375,6 +375,9 @@ class E160_graphics:
         # draw sensors
         self.draw_sensors(self.environment.robots[0])
 
+        for i in self.environment.get_walls(0):
+            self.draw_wall(i)
+
         # update the graphics
         self.tk.update()
 

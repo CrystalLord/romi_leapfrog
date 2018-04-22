@@ -46,7 +46,7 @@ class E160_robot:
         self.encoder_measurements = [0, 0]
         self.range_measurements = [0, 0, 0]
         # Orientations of the sensors on the robot
-        self.sensor_orientation = [0]#[-math.pi/4, 0, math.pi/4]
+        self.sensor_orientation = [0] #[-math.pi/4, 0, math.pi/4]
         self.last_simulated_encoder_R = 0
         self.last_simulated_encoder_L = 0
         
@@ -95,13 +95,13 @@ class E160_robot:
             self.state_est = self.environment.pf.LocalizeEstWithParticleFilter(
                 self.encoder_measurements,
                 [self.range_measurements[0]],
-                self
+                self.robot_id
             )
         else:
             self.state_est = self.environment.pf.LocalizeEstWithParticleFilter(
                 self.encoder_measurements,
                 self.range_measurements,
-                self
+                self.robot_id
             )
 
         self.last_encoder_measurements = self.encoder_measurements
@@ -337,7 +337,7 @@ class E160_robot:
         #p = self.PF.Particle(state.x, state.y, state.theta, 0)
         return self.environment.pf.FindMinWallDistance(
             p,
-            self.environment.walls,
+            self.environment.get_walls(self.robot_id),
             sensorT
         )
 

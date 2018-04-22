@@ -41,7 +41,7 @@ class E160_environment:
         
         # Setup the robots
 
-        self.num_robots = 1
+        self.num_robots = 2
         self.robots = []
         for i in range(self.num_robots):
             # TODO: assign different address to each bot
@@ -68,3 +68,21 @@ class E160_environment:
     def quit(self):
         self.xbee.halt()
         self.serial.close()
+
+    def get_walls(self, robot_id):
+        all_walls = [i for i in self.walls] # Copy the walls.
+        for i, r in enumerate(self.robots):
+            if i != robot_id:
+                e = r.state_est
+                radius = r.radius
+                new_wall_r = E160_wall([e.x+radius, e.y+radius, e.x+radius,
+                                        e.y-radius], "vertical")
+                new_wall_l = E160_wall([e.x-radius, e.y+radius, e.x-radius,
+                                        e.y-radius], "vertical")
+                new_wall_t = E160_wall([e.x-radius, e.y+radius, e.x+radius,
+                                        e.y+radius], "horizontal")
+                new_wall_b = E160_wall([e.x-radius, e.y-radius, e.x+radius,
+                                        e.y-radius], "horizontal")
+                all_walls += [new_wall_r, new_wall_l, new_wall_t, new_wall_b]
+        print(all_walls)
+        return all_walls
