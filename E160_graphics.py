@@ -57,7 +57,10 @@ class E160_graphics:
   
         # add stop button
         self.track_point_button = Button(self.bottom_frame, text="Quit", anchor="s", wraplength=100, command=self.quit).pack()
-  
+ 
+        # add reset button
+        self.track_point_button = Button(self.bottom_frame, text = "Reset", anchor = "s", wraplength = 100, command=self.reset).pack()
+ 
         # add range sensor measurements
         self.range_sensor_var_1 = StringVar()
         self.range_sensor_var_2 = StringVar()
@@ -279,8 +282,12 @@ class E160_graphics:
         self.forward_control.set(0)
         self.rotate_control.set(0)  
         self.gui_stopped = True
-        
-        
+    
+    def reset(self):
+        for r in self.environment.robots:
+            r.state_odo.set_state(0,0,0) 
+        self.environment.pf.InitializeParticles()
+ 
     def callback(self, event):
         desired_points = self.reverse_scale_points([float(event.x), float(event.y)], self.scale)
         robot = self.environment.robots[0]
