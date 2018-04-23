@@ -27,10 +27,10 @@ class E160_PF(object):
             self.IR_sigma = m2range(0.0039, scale=True)
         # Added by Jordan, odometry for distance
         # for each wheel
-        self.odom_wheel_std = 0.6 #0.2 #0.3
+        self.odom_wheel_std = 0.2 #0.2 #0.3
 
-        self.odom_xy_sigma = 1.25    # odometry delta_s s.d
-        self.odom_heading_sigma = 0.75    # odometry heading s.d
+        #self.odom_xy_sigma = 1.25    # odometry delta_s s.d
+        #self.odom_heading_sigma = 0.75    # odometry heading s.d
         self.particle_weight_sum = 0
 
         # Introducing new particles.
@@ -71,8 +71,7 @@ class E160_PF(object):
                               weight=1/self.numParticles)
             #p = self.Particle(0.0, 0.0, 0.0, 1.0/self.numParticles)
             #self.SetRandomStartPos(p)
-            self.SetKnownStartPos(p, ((0.0, 0.0, 0.0),)) #((0, 0, 0), (0, 0,
-            # 0)))
+            self.SetKnownStartPos(p, ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)))
             #self.SetKnownStartPos(p, 0, 0, 0)
             self.particles.append(p)
 
@@ -141,7 +140,12 @@ class E160_PF(object):
         # Propagate every particle individually.
         tempsum = 1.0e-100
         for i in range(len(self.particles)):
-            self.Propagate(robot,
+            if i == 0:
+                print(self.particles[i])
+                print(robot_id)
+                print(encoder_measurements)
+                print("----------")
+            self.Propagate(robot_id,
                            encoder_measurements, i)
             # TODO: CHANGE THIS TO A MULTIROBOT SOLUTION
             self.particles[i].weight = self.CalculateWeight(
@@ -206,7 +210,7 @@ class E160_PF(object):
         #self.last_encoder_measurements[1] = encoder_measurements[1]
         return self.GetEstimatedPos(robot_id)
 
-    def Propagate(self, robot, encoder_measurements, i):
+    def Propagate(self, robot_id, encoder_measurements, i):
         """
         Propagate all the particles from the last state with odometry readings
             Args:
@@ -217,7 +221,7 @@ class E160_PF(object):
                 None
         """
         # add student code here
-
+        robot = self.environment.robots[robot_id]
         lastEncoderL = robot.last_encoder_measurements[0]
         lastEncoderR = robot.last_encoder_measurements[1]
 
@@ -247,9 +251,9 @@ class E160_PF(object):
         delta_theta = 0.5 * (wheel_distance_r - wheel_distance_l)/robot.radius
 
         # Update the state estimate of the particle.
-        self.update_particle_state(i, delta_s, delta_theta)
+        self.update_particle_state(i, delta_s, delta_theta, robot_id=robot_id)
 
-    def update_particle_state(self, i, del_s, del_theta, robot_id=0):
+    def update_particle_state(self, i, del_s, del_theta, robot_id):
         """
         Args:
             i (int): Particle index
@@ -354,7 +358,6 @@ class E160_PF(object):
         mode = E160_subcluster.subcluster(self.particles, 0.2, robot_id)
         robot_state = E160_state(mode.get_x(robot_id), mode.get_y(robot_id),
                                  mode.get_theta(robot_id))
-        print("STATE ID {}".format(robot_id))
         return robot_state
 
     def FindMinWallDistance(self, particle, walls, sensorT):
@@ -540,8 +543,8 @@ class E160_PF(object):
             message = ""
             for s in range(len(self.states)):
                 message += (
-                    "(" + str(self.x(s)) + str(self.x(s)) + str(self.x(s))
-                    + ")"
+                    "(" + str(self.get_x(s)) + " " + str(self.get_y(s)) + " "
+                    + str(self.get_theta(s)) + ")"
                 )
                 message += " "
             return message

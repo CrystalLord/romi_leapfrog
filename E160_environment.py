@@ -57,8 +57,8 @@ class E160_environment:
             
             # set the control actuation
             r.update(deltaT)
-        
-        
+
+
     def log_data(self):
         
         # loop over all robots and update their state
@@ -84,5 +84,4 @@ class E160_environment:
                 new_wall_b = E160_wall([e.x-radius, e.y-radius, e.x+radius,
                                         e.y-radius], "horizontal")
                 all_walls += [new_wall_r, new_wall_l, new_wall_t, new_wall_b]
-        print(all_walls)
         return all_walls

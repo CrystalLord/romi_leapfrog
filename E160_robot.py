@@ -71,12 +71,14 @@ class E160_robot:
         self.angular_to_wheel_conv = 440
 
         # ADDED BY M SANGHEETHA NAIDU
-        self.points = [[0.2,-0.1,-1.57]] 
-                      # [0.0, 0.0,0.0], 
+        self.path = None
+        self.is_following_path = False
+        self.use_full_path_distance = False
+        #self.points = [[0.2,-0.1,-1.57]]
+                      # [0.0, 0.0,0.0],
                       # [0.20,0.0,1.57], 
                       # [0.20, 0.20, 1.57],
                       # [0.0, 0.0, 0.0]]
-        self.is_hardcoded = False
 
     def update(self, deltaT):
         # get sensor measurements
@@ -87,8 +89,7 @@ class E160_robot:
         delta_s, delta_theta = self.update_odometry(self.encoder_measurements)
 
         # update simulated real position, find ground truth for simulation
-        self.state_odo = self.localize(self.state_odo, delta_s, delta_theta,
-                                       self.range_measurements)
+        self.state_odo = self.localize(self.state_odo, delta_s, delta_theta)
 
         # localize with particle filter
         if self.environment.robot_mode == "HARDWARE MODE":
@@ -143,7 +144,7 @@ class E160_robot:
                                           range_measurements))
         return encoder_measurements, range_measurements
 
-    def localize(self, state_est, delta_s, delta_theta, range_measurements):
+    def localize(self, state_est, delta_s, delta_theta):
         # New lab 4 state estimate function. We must be given delta_s and
         # delta_theta now.
         state_est = self.update_state(state_est, delta_s, delta_theta)
@@ -165,9 +166,13 @@ class E160_robot:
         if self.environment.control_mode == "MANUAL CONTROL MODE":
             desiredWheelSpeedR = self.manual_control_right_motor
             desiredWheelSpeedL = self.manual_control_left_motor
-            
+            if desiredWheelSpeedL > 0:
+                print(self.robot_id)
+                print(self)
+                print(self.environment.robots)
+                print("-----------------")
         elif self.environment.control_mode == "AUTONOMOUS CONTROL MODE":   
-            if self.is_hardcoded:
+            if self.is_following_path:
                 desiredWheelSpeedR, desiredWheelSpeedL = self.path_tracker_control()
             else: 
                 desiredWheelSpeedR, desiredWheelSpeedL = self.point_tracker_control()
@@ -178,29 +183,33 @@ class E160_robot:
         """ Takes in a list of points, where each point consists of x, y 
             and theta. Iteratively calls point_tracker_control() to take
             robot on path."""
-
-        if len(self.points) == 0:
-            return 0,0
+        if len(self.path) == 0:
+            return 0, 0
         else:
-            self.state_des.x = self.points[0][0]
-            self.state_des.y = self.points[0][1]
-            self.state_des.theta = self.points[0][2]
+            self.state_des.x = self.path[0][0]
+            self.state_des.y = self.path[0][1]
+            self.state_des.theta = self.path[0][2]
             self.point_tracked = False
             print("go to first point: ", self.state_des.x)
 
-            desiredWheelSpeedR, desiredWheelSpeedL = self.point_tracker_control()
+            if len(self.path) == 1:
+                desiredWheelSpeedR, desiredWheelSpeedL =\
+                    self.point_tracker_control()
+            else:
+                desiredWheelSpeedR, desiredWheelSpeedL = \
+                    self.point_tracker_control(track_theta=False)
             if self.debug:
                 print("Desired Wheel Speeds:", desiredWheelSpeedR,
-                    desiredWheelSpeedL)
-            if desiredWheelSpeedR == 0 and desiredWheelSpeedL == 0:
-                self.points = self.points[1:]
+                      desiredWheelSpeedL)
+            if self.point_tracked:
+                self.path = self.path[1:]
 
         return desiredWheelSpeedR, desiredWheelSpeedL
     
-    def point_tracker_control(self):
+    def point_tracker_control(self, track_theta=True, use_full_path=True):
         """Set desired wheel positions from a given desired point"""
         # Local gains, set to environment variables later
-        distGain = 1.5
+        distGain = 1.8
         rotateGain = 12
         alphaGain = 10
         betaGain = -0.5
@@ -209,7 +218,7 @@ class E160_robot:
 
         # What are the thresholds for reaching the target? When are we close
         # enough?
-        distThresh = 0.02
+        distThresh = 0.05
         thetaThresh = 0.06
 
         # Shorthands for our current state
@@ -220,9 +229,15 @@ class E160_robot:
                                 self.state_des.y - curY,
                                 self.norm_theta(self.state_des.theta
                                                 - curTheta))
+        if not track_theta:
+            deltheta = 0
 
         # Get distance to target.
         distTarget = math.sqrt(delx**2 + dely**2)
+        if not use_full_path:
+            rho = distTarget
+        else:
+            rho = self.length_along_path()
         # Is the target point in front or behind the robot?
         dirX = math.cos(curTheta)
         dirY = math.sin(curTheta)
@@ -237,7 +252,8 @@ class E160_robot:
         else:
             onlyRotate = False
 
-        print("rho      :", distTarget)
+        print("distTarget      :", distTarget)
+        print("rho      :", rho)
         print("deltheta :", math.degrees(deltheta))
         print("thetaThresh :", math.degrees(thetaThresh))
 
@@ -252,14 +268,14 @@ class E160_robot:
                 alpha = self.norm_theta(-curTheta
                         + self.norm_theta(math.atan2(dely * dot, delx * dot)))
                 # Set drive amount
-                desV = (distGain*distTarget + velNom)
+                desV = (distGain*rho + velNom)
             else:
                 # Reverse the angle if the target is behind us.
                 alpha = self.norm_theta(
                     -curTheta + self.norm_theta(math.atan2(dely * dot,
                                                            delx * dot)))
                 # Reverse the drive direction.
-                desV = (distGain*distTarget + velNom) * -1
+                desV = (distGain*rho + velNom) * -1
 
             # Get reverse change of angle.
             beta = self.norm_theta(self.norm_theta(-curTheta - alpha)+self.state_des.theta)
@@ -280,10 +296,13 @@ class E160_robot:
             print("desW     :", desW)
             print("desV     :", desV)
 
-            desiredWheelSpeedR = 2*(desV + desW*self.width) \
-                    /self.wheel_radius * -1
-            desiredWheelSpeedL = 2*(-desV + desW*self.width) \
-                    /self.wheel_radius
+            desiredWheelSpeedR, desiredWheelSpeedL = self.get_des_wheel(
+                desV, desW
+            )
+            #desiredWheelSpeedR = 2*(desV + desW*self.width) \
+            #        /self.wheel_radius * -1
+            #desiredWheelSpeedL = 2*(-desV + desW*self.width) \
+            #        /self.wheel_radius
 
         # the desired point has been tracked, so don't move
         else:
@@ -297,6 +316,13 @@ class E160_robot:
         print("WR:{}, WL:{}".format(desiredWheelSpeedR, desiredWheelSpeedL))
         print("-----------")
 
+        return desiredWheelSpeedR, desiredWheelSpeedL
+
+    def get_des_wheel(self, desV, desW):
+        desiredWheelSpeedR = 2*(desV + desW*self.width) \
+                             /self.wheel_radius * -1
+        desiredWheelSpeedL = 2*(-desV + desW*self.width) \
+                             /self.wheel_radius
         return desiredWheelSpeedR, desiredWheelSpeedL
 
     def send_control(self, R, L, deltaT):
@@ -367,14 +393,10 @@ class E160_robot:
         f.write(' '.join(data) + '\n')
         f.close()
         
-        
     def set_manual_control_motors(self, R, L):
-        
         self.manual_control_right_motor = int(R*256/100)
         self.manual_control_left_motor = int(L*256/100)                                                         
    
-
-
     def update_odometry(self, encoder_measurements):
         """From Lab 2, update the possible state from encoder measurements."""
         delta_s = 0
@@ -462,3 +484,31 @@ class E160_robot:
         for w in wheel_angular_vels:
             new_vels.append(w * scaling)
         return new_vels
+
+    def assign_path(self, path_points):
+        self.path = path_points
+        self.is_following_path = True
+
+    def cancel_path(self):
+        self.path = None
+        self.is_following_path = False
+
+    def length_along_path(self):
+        if self.path is None:
+            return 0
+        start_x = self.state_est.x
+        start_y = self.state_est.y
+        init_dist = math.sqrt((start_x - self.path[0][0])**2 +
+                              (start_y - self.path[0][1])**2)
+        running_dist = 0
+        for i in range(1, len(self.path)):
+            p1 = self.path[i-1]
+            p2 = self.path[i]
+            running_dist += math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+        return running_dist + init_dist
+
+    def rotation_track(self, other_id):
+        other_robot = self.environment.robots[other_id]
+        to_angle = math.atan2(other_robot.state_est.y - self.state_est.y,
+                              other_robot.state_est.x - self.state_est.x)
+        delta_theta = self.angle_wrap(to_angle - self.state_est.theta)
