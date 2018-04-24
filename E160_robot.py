@@ -8,7 +8,7 @@ import time
 
 class E160_robot:
 
-    def __init__(self, environment, address, robot_id):
+    def __init__(self, environment, address, robot_id, other_pair_id=None):
         self.debug = False
 
         self.environment = environment
@@ -19,8 +19,8 @@ class E160_robot:
 
         # Where are we drawing the robot on the GUI?
         self.state_draw = E160_state()
-        self.state_odo = E160_state()
-        self.state_odo.set_state(0, 0, 0) # real position for simulation
+        #self.state_odo = E160_state()
+        #self.state_odo.set_state(0, 0, 0) # real position for simulation
         # --------------------------------------------------------------------
 
         self.R = 0
@@ -32,6 +32,7 @@ class E160_robot:
         self.ID = self.address.encode().__str__()[-1]
         self.last_measurements = []
         self.robot_id = robot_id
+        self.other_pair_id = other_pair_id
         self.manual_control_left_motor = 0
         self.manual_control_right_motor = 0
         self.file_name = 'Log/Bot' + str(self.robot_id) + '_'\
@@ -42,9 +43,9 @@ class E160_robot:
 
         self.encoder_resolution = 1440
 
-        self.last_encoder_measurements = [0, 0]
-        self.encoder_measurements = [0, 0]
-        self.range_measurements = [0, 0, 0]
+        #self.last_encoder_measurements = [0, 0]
+        #self.encoder_measurements = [0, 0]
+        #self.range_measurements = [0, 0, 0]
         # Orientations of the sensors on the robot
         self.sensor_orientation = [0] #[-math.pi/4, 0, math.pi/4]
         self.last_simulated_encoder_R = 0
@@ -53,6 +54,9 @@ class E160_robot:
         self.Kpho = 1#1.0
         self.Kalpha = 2#2.0
         self.Kbeta = -0.5#-0.5
+
+        self.rotate_gain = 12
+
         self.max_velocity = 1#0.05
         self.max_angular_vel = 3
         self.point_tracked = True
@@ -73,6 +77,7 @@ class E160_robot:
         # ADDED BY M SANGHEETHA NAIDU
         self.path = None
         self.is_following_path = False
+        self.is_rotation_tracking = False
         self.use_full_path_distance = False
         #self.points = [[0.2,-0.1,-1.57]]
                       # [0.0, 0.0,0.0],
@@ -80,34 +85,70 @@ class E160_robot:
                       # [0.20, 0.20, 1.57],
                       # [0.0, 0.0, 0.0]]
 
+    def update_encoders_and_ranges(self, delta_t):
+        """
+        Slightly different from normal update.
+        Because we have to collect all the information from all robots
+        before doing localisation, we need to call this separately, before
+        update for all robots.
+        Args:
+            delta_t (float): timestep size
+
+        Returns:
+            Tuple of (encoder measurements, range measurements)
+        """
+        encoder_meas, range_meas = \
+            self.update_sensor_measurements(delta_t)
+        return encoder_meas, range_meas
+
     def update(self, deltaT):
         # get sensor measurements
-        self.encoder_measurements, self.range_measurements =\
-            self.update_sensor_measurements(deltaT)
+            #self.encoder_measurements, self.range_measurements =\
+            #    self.update_sensor_measurements(deltaT)
+        #self.encoder_measurements, range_mes =\
+        #    self.update_sensor_measurements(deltaT)
+        #self.environment.range_measurements[self.robot_id] = range_mes
+
+        encoder_measurements = self.environment.encoder_meas[self.robot_id]
+        range_measurements = self.environment.range_meas
+        # Retrieve the
+        last_encoder_measurements =\
+            self.environment.last_encoder_meas[self.robot_id]
 
         # update odometry
-        delta_s, delta_theta = self.update_odometry(self.encoder_measurements)
+        delta_s, delta_theta = self.update_odometry(encoder_measurements,
+                                                    last_encoder_measurements)
+
 
         # update simulated real position, find ground truth for simulation
-        self.state_odo = self.localize(self.state_odo, delta_s, delta_theta)
+        state_odo = self.environment.get_odo(self.robot_id)
+        state_odo = self.localize(state_odo, delta_s, delta_theta)
+        self.environment.set_odo(self.robot_id, state_odo)
 
         # localize with particle filter
         if self.environment.robot_mode == "HARDWARE MODE":
             self.state_est = self.environment.pf.LocalizeEstWithParticleFilter(
-                self.encoder_measurements,
-                [self.range_measurements[0]],
+                encoder_measurements,
+                last_encoder_measurements,
+                [[i[0]] for i in range_measurements],
                 self.robot_id
             )
         else:
+            print("range_measurements: {}".format(range_measurements))
             self.state_est = self.environment.pf.LocalizeEstWithParticleFilter(
-                self.encoder_measurements,
-                self.range_measurements,
+                encoder_measurements,
+                last_encoder_measurements,
+                range_measurements,
                 self.robot_id
             )
 
-        self.last_encoder_measurements = self.encoder_measurements
+        # Update the environment's encoder measurements
+        self.environment.last_encoder_meas[self.robot_id] = \
+            encoder_measurements
+        # Old system of updating encoder measurements which are local.
+        #self.last_encoder_measurements = self.encoder_measurements
         # to out put the true location for display purposes only.
-        self.state_draw = self.state_odo
+        self.state_draw = self.environment.get_odo(self.robot_id)
 
         # call motion planner
         #self.motion_planner.update_plan()
@@ -138,7 +179,11 @@ class E160_robot:
             # New in lab 4
             range_measurements = []
             for o in self.sensor_orientation:
-                new_reading = self.simulate_range_finder(self.state_odo, o)
+                new_reading = self.environment.simulate_range_finder(
+                    self.robot_id,
+                    self.environment.state_odo,
+                    o
+                )
                 range_measurements.append(new_reading)
             range_measurements = list(map(E160_rangeconv.m2range,
                                           range_measurements))
@@ -162,7 +207,11 @@ class E160_robot:
         return a
         
     def update_control(self):
-        
+
+        # Initialise to zero
+        desiredWheelSpeedR = 0
+        desiredWheelSpeedL = 0
+
         if self.environment.control_mode == "MANUAL CONTROL MODE":
             desiredWheelSpeedR = self.manual_control_right_motor
             desiredWheelSpeedL = self.manual_control_left_motor
@@ -171,12 +220,23 @@ class E160_robot:
                 print(self)
                 print(self.environment.robots)
                 print("-----------------")
-        elif self.environment.control_mode == "AUTONOMOUS CONTROL MODE":   
+        elif self.environment.control_mode == "AUTONOMOUS CONTROL MODE":
             if self.is_following_path:
+                # Follow the entire path
                 desiredWheelSpeedR, desiredWheelSpeedL = self.path_tracker_control()
-            else: 
+            else:
+                # Follow only next point.
                 desiredWheelSpeedR, desiredWheelSpeedL = self.point_tracker_control()
-            
+        elif self.environment.control_mode == "LEAP PATH CONTROL MODE":
+            if self.is_following_path:
+                desiredWheelSpeedR, desiredWheelSpeedL =\
+                    self.path_tracker_control()
+            elif self.is_rotation_tracking:
+                desiredWheelSpeedR, desiredWheelSpeedL =\
+                    self.rotation_track(self.other_pair_id)
+        else:
+            raise ValueError()
+
         return desiredWheelSpeedR, desiredWheelSpeedL
   
     def path_tracker_control(self):
@@ -210,7 +270,6 @@ class E160_robot:
         """Set desired wheel positions from a given desired point"""
         # Local gains, set to environment variables later
         distGain = 1.8
-        rotateGain = 12
         alphaGain = 10
         betaGain = -0.5
 
@@ -287,7 +346,7 @@ class E160_robot:
 
             if onlyRotate:
                 print("ONLY ROTATING------")
-                desW = deltheta * rotateGain
+                desW = deltheta * self.rotate_gain
                 desV = 0
 
             # Add nominal angular velocity
@@ -356,14 +415,13 @@ class E160_robot:
 
         return [left_encoder_measurement, right_encoder_measurement]
 
-    def simulate_range_finder(self, state, sensorT):
+    def simulate_range_finder(self, states, sensorT):
         """Simulate range readings, given a simulated ground truth state"""
         p = self.environment.pf.Particle(((state.x, state.y, state.theta),
                                           (0, 0, 0)), 0)
-        #p = self.PF.Particle(state.x, state.y, state.theta, 0)
         return self.environment.pf.FindMinWallDistance(
             p,
-            self.environment.get_walls(self.robot_id),
+            self.environment.get_walls_leap(self.robot_id, p.states),
             sensorT
         )
 
@@ -382,12 +440,13 @@ class E160_robot:
         # edit this line to have data logging of the data you care about
         #data = [str(x) for x in [1,2,3,4,5]]
         # Old lab 3 log data.
+        state_odo = self.environment.get_odo(self.robot_id)
         data = [str(x) for x in [time.time(), self.state_est.x,
                                  self.state_est.y, self.state_est.theta,
-                                 self.state_odo.x, self.state_odo.y,
-                                 self.state_odo.theta,
+                                 state_odo.x, state_odo.y,
+                                 state_odo.theta,
                                  self.environment.pf.particle_weight_sum,
-                                 self.range_measurements[0],
+                                 self.environment.range_meas[self.robot_id],
                                  self.environment.pf.numParticles]]
         
         f.write(' '.join(data) + '\n')
@@ -397,7 +456,7 @@ class E160_robot:
         self.manual_control_right_motor = int(R*256/100)
         self.manual_control_left_motor = int(L*256/100)                                                         
    
-    def update_odometry(self, encoder_measurements):
+    def update_odometry(self, encoder_measurements, last_encoder_measurements):
         """From Lab 2, update the possible state from encoder measurements."""
         delta_s = 0
         delta_theta = 0
@@ -406,7 +465,7 @@ class E160_robot:
 
         # Calculate encoder differences
         encoderL, encoderR = encoder_measurements
-        lastencoderL, lastencoderR = self.last_encoder_measurements
+        lastencoderL, lastencoderR = last_encoder_measurements
 
         diffEncoderL = (encoderL - lastencoderL)
         diffEncoderL = diffEncoderL if diffEncoderL <= 1000 else 0
@@ -414,6 +473,7 @@ class E160_robot:
         diffEncoderR = diffEncoderR if diffEncoderR <= 1000 else 0
 
         # remember for next time
+
         #self.last_encoder_measurements[0] = encoderL
         #self.last_encoder_measurements[1] = encoderR
 
@@ -431,7 +491,7 @@ class E160_robot:
         # keep this to return appropriate changes in distance, angle
         return delta_s, delta_theta
 
-    def update_state(self, state, delta_s, delta_theta):
+    def update_state(self, state, delta_s, delta_theta, ):
         """From Lab 2"""
         # ****************** Additional Student Code: Start ************
         state.x += delta_s * math.cos(state.theta + 0.5*delta_theta)
@@ -512,3 +572,6 @@ class E160_robot:
         to_angle = math.atan2(other_robot.state_est.y - self.state_est.y,
                               other_robot.state_est.x - self.state_est.x)
         delta_theta = self.angle_wrap(to_angle - self.state_est.theta)
+        des_w = delta_theta * self.rotate_gain
+        des_v = 0
+        return self.get_des_wheel(des_v, des_w)

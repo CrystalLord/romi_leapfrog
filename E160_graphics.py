@@ -118,10 +118,10 @@ class E160_graphics:
         self.state_est_particles = [self.canvas.create_oval(0, 0, 0, 0,
                                                            fill='black')
                                    for _ in self.environment.robots]
-        self.sensor_rays = [self.canvas.create_line(0, 0, 0, 0, fill='black')
-                            for _ in self.environment.robots[0]
-                                .range_measurements]
-
+        self.sensor_rays = [[self.canvas.create_line(0, 0, 0, 0, fill='black')
+                            for q in self.environment.range_meas[0]]
+                            for r in self.environment.robots]
+        print("INIT {}".format(self.sensor_rays))
         self.path_points = []
 
         # =====================================================================
@@ -251,17 +251,18 @@ class E160_graphics:
                                     point[1] + 4,
                                     fill=colour)
 
-    def draw_sensors(self, robot):
+    def draw_sensors(self, robot_id):
+        robot = self.environment.robots[robot_id]
         est = robot.state_est
-        s = robot.range_measurements
+        s = self.environment.range_meas[robot_id]
         for i, o in enumerate(robot.sensor_orientation):
             ran = E160_rangeconv.range2m(s[i])  # Get real world ranges
-            self.canvas.delete(self.sensor_rays[i])
+            self.canvas.delete(self.sensor_rays[robot_id][i])
             inter_x = math.cos(o+est.theta)*ran + est.x
             inter_y = math.sin(o+est.theta)*ran + est.y
             points = self.scale_points([est.x, est.y, inter_x, inter_y],
                                        self.scale)
-            self.sensor_rays[i] = (self.canvas.create_line(
+            self.sensor_rays[robot_id][i] = (self.canvas.create_line(
                 points[0],
                 points[1],
                 points[2],
@@ -270,8 +271,9 @@ class E160_graphics:
 
 
     def track_point(self):
-        self.environment.control_mode = "AUTONOMOUS CONTROL MODE"
-                
+        #self.environment.control_mode = "AUTONOMOUS CONTROL MODE"
+        self.environment.control_mode = "LEAP PATH CONTROL MODE"
+
         # update sliders on gui
         self.forward_control.set(0)
         self.rotate_control.set(0)
@@ -291,6 +293,8 @@ class E160_graphics:
                                                0.7, fidelity=3)
                 r.assign_path(path)
                 r.point_tracked = False
+            if i == 1:
+                r.is_rotation_tracking = True
             #r.state_des.set_state(x_des,y_des,theta_des)
 
     def stop(self):
@@ -363,22 +367,25 @@ class E160_graphics:
             robot.set_manual_control_motors(self.R, self.L)
 
     def update_labels(self):
-        self.range_sensor_var_1.set("Range 1 (m):  " + str(self.environment.robots[0].range_measurements[0]))
+        self.range_sensor_var_1.set("Range 1 (m):  " + str(
+            self.environment.range_meas[0][0]))
         try:
             self.range_sensor_var_2.set(
-                "Range 2 (m):  " + str(self.environment.robots[
-                                       0].range_measurements[1]))
+                "Range 2 (m):  " + str(self.environment.range_meas[0][1]))
         except IndexError:
             self.range_sensor_var_2.set("Range 2 (m):  NaN")
 
         try:
-            self.range_sensor_var_3.set("Range 3 (m):  " + str(self.environment.robots[0].range_measurements[2]))
+            self.range_sensor_var_3.set("Range 3 (m):  " + str(
+                self.environment.range_meas[0][2]))
         except IndexError:
             self.range_sensor_var_3.set("Range 3 (m):  NaN")
             pass
                 
-        self.encoder_sensor_var_0.set("Encoder 0 (m):  " + str(self.environment.robots[0].encoder_measurements[0]))
-        self.encoder_sensor_var_1.set("Encoder 1 (m):  " + str(self.environment.robots[0].encoder_measurements[1]))
+        self.encoder_sensor_var_0.set("Encoder 0 (m):  " + str(
+            self.environment.encoder_meas[0][0]))
+        self.encoder_sensor_var_1.set("Encoder 1 (m):  " + str(
+            self.environment.encoder_meas[0][1]))
 
         self.x.set("X_est (m):  " + str(self.environment.robots[0].state_est.x))
         self.y.set("Y_est (m):  " + str(self.environment.robots[0].state_est.y))
@@ -403,7 +410,8 @@ class E160_graphics:
         self.draw_est(0, "blue")
         self.draw_est(1, "purple")
         # draw sensors
-        self.draw_sensors(self.environment.robots[0])
+        self.draw_sensors(0)
+        self.draw_sensors(1)
 
         if self.environment.robots[0].path is not None:
             self.draw_path(self.environment.robots[0].path)

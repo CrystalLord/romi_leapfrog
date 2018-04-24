@@ -16,18 +16,16 @@ class E160_environment:
 
         # set up walls, putting top left point first
         self.walls = []
-        self.walls.append(E160_wall([-0.5, 0.3, -0.5, -0.3], "vertical"))
-        self.walls.append(E160_wall([1, 0.8, 1, -0.3], "vertical"))
-        self.walls.append(E160_wall([-0.4, 0.5, 0.4, 0.5], "horizontal"))
-        self.walls.append(E160_wall([-0.4, 1, 1, 1], "horizontal"))
-        self.walls.append(E160_wall([-1, 0.8, -1, -0.3], "vertical"))
-        # self.walls.append(E160_wall([0.5, -0.5, 1, -0.5],"horizontal"))
-        # self.walls.append(E160_wall([-0.5, -0.5, 0.5, -1],"horizontal"))
-        # self.walls.append(E160_wall([-0.5, -0.5, 0.0, -1.0],"vertical"))
+        #self.walls.append(E160_wall([-0.5, 0.3, -0.5, -0.3], "vertical"))
+        #self.walls.append(E160_wall([1, 0.8, 1, -0.3], "vertical"))
+        #self.walls.append(E160_wall([-0.4, 0.5, 0.4, 0.5], "horizontal"))
+        #self.walls.append(E160_wall([-0.4, 1, 1, 1], "horizontal"))
+        #self.walls.append(E160_wall([-1, 0.8, -1, -0.3], "vertical"))
 
         # create vars for hardware vs simulation
         # "SIMULATION MODE" or "HARDWARE MODE"
         self.robot_mode = mode
+        self.using_leapfrog = True
         self.control_mode = "MANUAL CONTROL MODE"
 
         # setup xbee communication
@@ -48,14 +46,30 @@ class E160_environment:
             r = E160_robot(self, '\x00\x0C', i)
             self.robots.append(r)
 
+        # Pair the two robots up
+        self.robots[0].other_pair_id = 1
+        self.robots[1].other_pair_id = 0
+
+        # Store the measurements of all robots here.
+        self.range_meas = [[0] for _ in self.robots]
+        self.encoder_meas = [[0, 0] for _ in self.robots]
+        self.last_encoder_meas = [[0, 0] for _ in self.robots]
+        self.state_odo = [E160_state() for _ in self.robots]
+
         self.pf = E160_PF.E160_PF(self, self.robots)
 
     def update_robots(self, deltaT):
         
         # loop over all robots and update their state
-        for r in self.robots:
+        for i, r in enumerate(self.robots):
             
             # set the control actuation
+            encoder_meas, range_meas = r.update_encoders_and_ranges(deltaT)
+            self.encoder_meas[i] = encoder_meas
+            self.range_meas[i] = range_meas
+
+        for r in self.robots:
+            # This modifies self.last_encoder_meas
             r.update(deltaT)
 
 
@@ -69,11 +83,15 @@ class E160_environment:
         self.xbee.halt()
         self.serial.close()
 
-    def get_walls(self, robot_id):
-        all_walls = [i for i in self.walls] # Copy the walls.
+    def get_walls_leap(self, robot_id, particle_states):
+        all_walls = [i for i in self.walls]  # Copy the walls.
+        print("Robot ID {}".format(robot_id))
         for i, r in enumerate(self.robots):
             if i != robot_id:
-                e = r.state_est
+                e = E160_state()
+                e.set_from_tuple(particle_states[i])
+                print(particle_states)
+                print("Where {} thinks {} is: {}".format(robot_id, i, e))
                 radius = r.radius
                 new_wall_r = E160_wall([e.x+radius, e.y+radius, e.x+radius,
                                         e.y-radius], "vertical")
@@ -83,5 +101,27 @@ class E160_environment:
                                         e.y+radius], "horizontal")
                 new_wall_b = E160_wall([e.x-radius, e.y-radius, e.x+radius,
                                         e.y-radius], "horizontal")
+                print("new_wall_r {}".format(new_wall_r))
                 all_walls += [new_wall_r, new_wall_l, new_wall_t, new_wall_b]
         return all_walls
+
+    def get_odo(self, robot_id):
+        return self.state_odo[robot_id]
+
+    def set_odo(self, robot_id, val):
+        self.state_odo[robot_id] = val
+
+    def simulate_range_finder(self, robot_id, states, sensorT):
+        """Simulate range readings, given a simulated ground truth state"""
+        temp_list = []
+        for s in states:
+            temp_list.append((s.x, s.y, s.theta))
+        p = self.pf.Particle(tuple(temp_list), weight=0)
+        walls = self.get_walls_leap(robot_id, p.states)
+        print("WALLS: {}".format(walls))
+        return self.pf.FindMinWallDistance(
+            p,
+            walls,
+            sensorT,
+            robot_id
+        )
