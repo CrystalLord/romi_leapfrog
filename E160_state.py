@@ -8,5 +8,10 @@ class E160_state:
         self.y = y
         self.theta = theta
 
+    def set_from_tuple(self, tuple):
+        self.x = tuple[0]
+        self.y = tuple[1]
+        self.theta = tuple[2]
+
     def __repr__(self):
         return "E160_state({},{},{})".format(self.x, self.y, self.theta)

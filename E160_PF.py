@@ -13,7 +13,7 @@ class E160_PF(object):
     def __init__(self, environment, robots):
         self.particles = []
         self.environment = environment
-        self.numParticles = 200
+        self.numParticles = 50
 
         # maybe should just pass in a robot class?
         self.FAR_READING = range2m(0)
@@ -29,8 +29,6 @@ class E160_PF(object):
         # for each wheel
         self.odom_wheel_std = 0.6 #0.2 #0.3
 
-        self.odom_xy_sigma = 1.25    # odometry delta_s s.d
-        self.odom_heading_sigma = 0.75    # odometry heading s.d
         self.particle_weight_sum = 0
 
         # Introducing new particles.
@@ -71,9 +69,7 @@ class E160_PF(object):
                               weight=1/self.numParticles)
             #p = self.Particle(0.0, 0.0, 0.0, 1.0/self.numParticles)
             #self.SetRandomStartPos(p)
-            self.SetKnownStartPos(p, ((0.0, 0.0, 0.0),)) #((0, 0, 0), (0, 0,
-            # 0)))
-            #self.SetKnownStartPos(p, 0, 0, 0)
+            self.SetKnownStartPos(p, ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)))
             self.particles.append(p)
 
     def GetPDF(self, mu, sd, x):
@@ -125,8 +121,10 @@ class E160_PF(object):
 
     def LocalizeEstWithParticleFilter(self,
                                       encoder_measurements,
+                                      last_encoder_measurements,
                                       sensor_readings,
-                                      robot_id):
+                                      robot_id,
+                                      angle_reading=None):
         """" Localize the robot with particle filters. Call everything
             Args:
                 delta_s (float): change in distance as calculated by odometry
@@ -136,28 +134,45 @@ class E160_PF(object):
                 state_est (E160 state): state derived from the average of all particles
         """
         start_time = time.time()
-        robot = self.environment.robots[robot_id]
 
         # Propagate every particle individually.
         tempsum = 1.0e-100
         for i in range(len(self.particles)):
-            self.Propagate(robot,
-                           encoder_measurements, i)
+            self.Propagate(robot_id,
+                           encoder_measurements,
+                           last_encoder_measurements,
+                           i)
             # TODO: CHANGE THIS TO A MULTIROBOT SOLUTION
-            self.particles[i].weight = self.CalculateWeight(
-                sensor_readings,
-                self.environment.get_walls(0),
-                i,
-                self.environment.robots[0]
-            )
+            if self.environment.using_leapfrog:
+                self.particles[i].weight = self.CalculateWeight(
+                    sensor_readings[0],
+                    self.environment.get_walls_leap(0,
+                                                    self.particles[i].states),
+                    i,
+                    0
+                )
+                self.particles[i].weight += self.CalculateWeight(
+                    sensor_readings[1],
+                    self.environment.get_walls_leap(1,
+                                                    self.particles[i].states),
+                    i,
+                    1
+                )
+            else:
+                self.particles[i].weight = self.CalculateWeight(
+                    sensor_readings,
+                    self.environment.get_walls(0),
+                    i,
+                    self.environment.robots[0]
+                )
             tempsum += self.particles[i].weight
         self.particle_weight_sum = tempsum
 
         # Resample particles to get a new set of particles
         diff_encoder_l = (encoder_measurements[0] -
-                          robot.last_encoder_measurements[0])
+                          last_encoder_measurements[0])
         diff_encoder_r = (encoder_measurements[1] -
-                          robot.last_encoder_measurements[1])
+                          last_encoder_measurements[1])
         encoder_mag = diff_encoder_r**2 + diff_encoder_l**2
         #print(diff_e, diff_encoder_r)
         # Make sure we actually are moving
@@ -202,24 +217,23 @@ class E160_PF(object):
             self.particles = new_particles
 
         # At the end, update our encoder measurements
-        #self.last_encoder_measurements[0] = encoder_measurements[0]
-        #self.last_encoder_measurements[1] = encoder_measurements[1]
         return self.GetEstimatedPos(robot_id)
 
-    def Propagate(self, robot, encoder_measurements, i):
+    def Propagate(self, robot_id, encoder_measurements,
+                  last_encoder_measurements, i):
         """
         Propagate all the particles from the last state with odometry readings
             Args:
-                robot: Robot to propagate forwards
+                robot_id (int): Robot id of robot to propagate forwards
                 encoder_measurements (wheel1, wheel2):
                 i: Particle index
             return:
                 None
         """
         # add student code here
-
-        lastEncoderL = robot.last_encoder_measurements[0]
-        lastEncoderR = robot.last_encoder_measurements[1]
+        robot = self.environment.robots[robot_id]
+        lastEncoderL = last_encoder_measurements[0]
+        lastEncoderR = last_encoder_measurements[1]
 
         # Get the change in encoder readings.
         diff_encoder_l = encoder_measurements[0] - lastEncoderL
@@ -247,9 +261,9 @@ class E160_PF(object):
         delta_theta = 0.5 * (wheel_distance_r - wheel_distance_l)/robot.radius
 
         # Update the state estimate of the particle.
-        self.update_particle_state(i, delta_s, delta_theta)
+        self.update_particle_state(i, delta_s, delta_theta, robot_id=robot_id)
 
-    def update_particle_state(self, i, del_s, del_theta, robot_id=0):
+    def update_particle_state(self, i, del_s, del_theta, robot_id):
         """
         Args:
             i (int): Particle index
@@ -274,11 +288,13 @@ class E160_PF(object):
         #particle.y += del_s * math.sin(theta + 0.5*del_theta)
         #particle.heading = self.angleDiff(theta + del_theta)
 
-    def CalculateWeight(self, sensor_readings, walls, particle_index, robot):
+    def CalculateWeight(self, sensor_readings, walls, particle_index,
+                        robot_id):
         '''Calculate the weight of a particular particle
             Args:
                 particle (E160_Particle): a given particle
-                sensor_readings ( [float, ...] ): readings from the IR sesnors
+                sensor_readings ( [float, ...] ): readings from the IR sensors
+                                                  for only this robot.
                 walls ([ [four doubles], ...] ): positions of the walls from
                                                  environment,
                                                  represented as 4 doubles
@@ -286,9 +302,10 @@ class E160_PF(object):
                 new weight of the particle (float) '''
         particle = self.particles[particle_index]
         expected = []
-        expect_time = time.time()
+        robot = self.environment.robots[robot_id]
         for o in robot.sensor_orientation:
-            expected.append(self.FindMinWallDistance(particle, walls, o))
+            expected.append(self.FindMinWallDistance(particle, walls, o,
+                                                     robot_id))
 
         # We need the probability of getting these sensor readings at this
         # given state.
@@ -307,7 +324,7 @@ class E160_PF(object):
                                 1/len(expected))
             if mu < m2range(self.FAR_READING) + 5:
                 addition *= 0.25 #0.1
-            distance_sensor_prob += addition
+            distance_sensor_prob *= addition
 
             px = particle.get_x(0)
             py = particle.get_y(0)
@@ -354,10 +371,9 @@ class E160_PF(object):
         mode = E160_subcluster.subcluster(self.particles, 0.2, robot_id)
         robot_state = E160_state(mode.get_x(robot_id), mode.get_y(robot_id),
                                  mode.get_theta(robot_id))
-        print("STATE ID {}".format(robot_id))
         return robot_state
 
-    def FindMinWallDistance(self, particle, walls, sensorT):
+    def FindMinWallDistance(self, particle, walls, sensorT, robot_id):
         ''' Given a particle position, walls, and a sensor, find
             shortest distance to the wall
             Args:
@@ -377,17 +393,23 @@ class E160_PF(object):
             segment3 = (p[2][0], p[2][1], p[3][0], p[3][1]) # Bottom segment
             segment4 = (p[3][0], p[3][1], p[0][0], p[0][1]) # Left segment
 
-            seg1dist = self.FindWallDistance(particle, segment1, sensorT)
-            seg2dist = self.FindWallDistance(particle, segment2, sensorT)
-            seg3dist = self.FindWallDistance(particle, segment3, sensorT)
-            seg4dist = self.FindWallDistance(particle, segment4, sensorT)
+            seg1dist = self.FindWallDistance(particle, segment1, sensorT,
+                                             robot_id)
+            seg2dist = self.FindWallDistance(particle, segment2, sensorT,
+                                             robot_id)
+            seg3dist = self.FindWallDistance(particle, segment3, sensorT,
+                                             robot_id)
+            seg4dist = self.FindWallDistance(particle, segment4, sensorT,
+                                             robot_id)
 
             newdist = min(seg1dist, seg2dist, seg3dist, seg4dist)
             if newdist < current_min:
                 current_min = newdist
+        #print("IN WALLS FINDER -----------")
+        #print("id: {}, current_min: {}".format())
         return current_min
 
-    def FindWallDistance(self, particle, wall, sensorT, robot_id=0):
+    def FindWallDistance(self, particle, wall, sensorT, robot_id):
         ''' Given a particle position, a wall, and a sensor, find distance to the wall
             Args:
                 particle (E160_Particle): a particle
@@ -540,8 +562,8 @@ class E160_PF(object):
             message = ""
             for s in range(len(self.states)):
                 message += (
-                    "(" + str(self.x(s)) + str(self.x(s)) + str(self.x(s))
-                    + ")"
+                    "(" + str(self.get_x(s)) + " " + str(self.get_y(s)) + " "
+                    + str(self.get_theta(s)) + ")"
                 )
                 message += " "
             return message

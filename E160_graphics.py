@@ -5,6 +5,7 @@ from PIL import Image, ImageTk
 from pynput.keyboard import Key, Listener
 
 import E160_rangeconv
+import E160_leap
 
 class E160_graphics:
     
@@ -14,7 +15,6 @@ class E160_graphics:
         #self.north_east_frame = Frame(self.tk)
         #self.north_east_frame.pack(anchor = NE)
         self.north_west_frame = Frame(self.tk)
-        print("Ran here!")
         self.north_west_frame.pack(anchor=W)
         #self.north_frame = Frame(self.tk)
         #self.north_frame.pack(anchor = N)
@@ -108,14 +108,22 @@ class E160_graphics:
 
         # initilize particle representation
         self.particles_dot = [self.canvas.create_oval(0,0,0,0, fill ='black')
-                              for x in range(self.environment.pf.numParticles)]
+                              for x in
+                              range(self.environment.pf.numParticles
+                                    * len(self.environment.robots))
+        ]
         self.angles_dots = [self.canvas.create_line(0, 0, 0, 0, fill='green')
                             for _ in range(self.environment.pf.numParticles)]
-        self.state_est_particle = self.canvas.create_oval(0, 0, 0, 0,
-                                                          fill='black')
-        self.sensor_rays = [self.canvas.create_line(0, 0, 0, 0, fill='black')
-                            for _ in self.environment.robots[0]
-                                .range_measurements]
+
+        self.state_est_particles = [self.canvas.create_oval(0, 0, 0, 0,
+                                                           fill='black')
+                                   for _ in self.environment.robots]
+        self.sensor_rays = [[self.canvas.create_line(0, 0, 0, 0, fill='black')
+                            for q in self.environment.range_meas[0]]
+                            for r in self.environment.robots]
+        print("INIT {}".format(self.sensor_rays))
+        self.path_points = []
+
         # =====================================================================
         # Graphical Settings
 
@@ -174,36 +182,48 @@ class E160_graphics:
         robot.robot_gif.thumbnail((50, 50), Image.ANTIALIAS)
 
     def draw_robot(self, robot):
-        
         # gif update
         robot.tkimage = ImageTk.PhotoImage(robot.robot_gif.rotate(180/3.14*robot.state_draw.theta))
         robot.image = self.canvas.create_image(robot.state_draw.x, robot.state_draw.y, image=robot.tkimage)
         robot_points = self.scale_points([robot.state_draw.x, robot.state_draw.y], self.scale)
         self.canvas.coords(robot.image, *robot_points)
-            
+
+    def draw_path(self, path_points):
+        for dp in self.path_points:
+            self.canvas.delete(dp)
+
+        for p in path_points:
+            scaled_p = self.scale_points(p, self.scale)
+            rect = (scaled_p[0]-2, scaled_p[1]-2, scaled_p[0]+2, scaled_p[1]+2)
+            new_point = self.canvas.create_rectangle(rect[0], rect[1],
+                                                     rect[2], rect[3],
+                                                     fill="red")
+            self.path_points.append(new_point)
+
     def get_inputs(self):
         pass
 
-    def draw_particles(self):
-        for i in range(self.environment.pf.numParticles):
+    def draw_particles(self, robot_id, color="red"):
+        numparticles = self.environment.pf.numParticles
+        for i in range(numparticles):
             # TODO: Change this from only showing the first robot
-            pf_point = [self.environment.pf.particles[i].get_x(0),
-                        self.environment.pf.particles[i].get_y(0)]
-            pf_angle = self.environment.pf.particles[i].get_theta(0)
+            pf_point = [self.environment.pf.particles[i].get_x(robot_id),
+                        self.environment.pf.particles[i].get_y(robot_id)]
+            pf_angle = self.environment.pf.particles[i].get_theta(robot_id)
             #h = str(hex(int((min(max(robot.PF.particles[i].weight
             #                         *robot.PF.numParticles, 0.0),
             #                          255.0)))))[2:]
             h = "ff"
             if len(h) < 2:
                 h += "0"
-            color = ('#' + h + "0000")
             point = self.scale_points(pf_point, self.scale)
-            self.canvas.delete(self.particles_dot[i]) 
-            self.particles_dot[i] = self.canvas.create_oval(point[0] - 2,
-                                                            point[1] - 2,
-                                                            point[0] + 2,
-                                                            point[1] + 2,
-                                                            fill=color)
+            self.canvas.delete(self.particles_dot[i + robot_id * numparticles])
+            self.particles_dot[i + robot_id * numparticles] =\
+                self.canvas.create_oval(point[0] - 2,
+                                        point[1] - 2,
+                                        point[0] + 2,
+                                        point[1] + 2,
+                                        fill=color)
 
             self.canvas.delete(self.angles_dots[i])
             # We need to flip the sign on these since in the GUI, the top
@@ -219,27 +239,30 @@ class E160_graphics:
                 lineto[1],
                 fill=self.headingcolor)
 
-    def draw_est(self, robot):
+    def draw_est(self, robot_id, colour="blue"):
+        robot = self.environment.robots[robot_id]
         pf_point = [robot.state_est.x, robot.state_est.y]
         point = self.scale_points(pf_point, self.scale)
-        self.canvas.delete(self.state_est_particle)
-        self.state_est_particle = self.canvas.create_oval(point[0] - 4,
-                                                          point[1] - 4,
-                                                          point[0] + 4,
-                                                          point[1] + 4,
-                                                          fill='blue')
+        self.canvas.delete(self.state_est_particles[robot_id])
+        self.state_est_particles[robot_id] = \
+            self.canvas.create_oval(point[0] - 4,
+                                    point[1] - 4,
+                                    point[0] + 4,
+                                    point[1] + 4,
+                                    fill=colour)
 
-    def draw_sensors(self, robot):
+    def draw_sensors(self, robot_id):
+        robot = self.environment.robots[robot_id]
         est = robot.state_est
-        s = robot.range_measurements
+        s = self.environment.range_meas[robot_id]
         for i, o in enumerate(robot.sensor_orientation):
             ran = E160_rangeconv.range2m(s[i])  # Get real world ranges
-            self.canvas.delete(self.sensor_rays[i])
+            self.canvas.delete(self.sensor_rays[robot_id][i])
             inter_x = math.cos(o+est.theta)*ran + est.x
             inter_y = math.sin(o+est.theta)*ran + est.y
             points = self.scale_points([est.x, est.y, inter_x, inter_y],
                                        self.scale)
-            self.sensor_rays[i] = (self.canvas.create_line(
+            self.sensor_rays[robot_id][i] = (self.canvas.create_line(
                 points[0],
                 points[1],
                 points[2],
@@ -248,8 +271,9 @@ class E160_graphics:
 
 
     def track_point(self):
-        self.environment.control_mode = "AUTONOMOUS CONTROL MODE"
-                
+        #self.environment.control_mode = "AUTONOMOUS CONTROL MODE"
+        self.environment.control_mode = "LEAP PATH CONTROL MODE"
+
         # update sliders on gui
         self.forward_control.set(0)
         self.rotate_control.set(0)
@@ -259,13 +283,20 @@ class E160_graphics:
         self.L = 0
         
         # draw robots
-        for r in self.environment.robots:
+        for i, r in enumerate(self.environment.robots):
             x_des = float(self.x_des_entry.get())
             y_des = float(self.y_des_entry.get())
             theta_des = float(self.theta_des_entry.get())
-            r.state_des.set_state(x_des,y_des,theta_des)
-            r.point_tracked = False 
-        
+            # TODO: Temporary hack to show leapfrogging.
+            if i == 0:
+                path = E160_leap.get_leap_path(self.environment.robots, i,
+                                               0.7, fidelity=3)
+                r.assign_path(path)
+                r.point_tracked = False
+            if i == 1:
+                r.is_rotation_tracking = True
+            #r.state_des.set_state(x_des,y_des,theta_des)
+
     def stop(self):
         self.environment.control_mode = "MANUAL CONTROL MODE"
         
@@ -311,7 +342,7 @@ class E160_graphics:
             self.last_forward_control = self.forward_control.get()
             self.last_rotate_control = 0         
             self.environment.control_mode = "MANUAL CONTROL MODE"
-            
+
             # extract what the R and L motor signals should be
             self.R = -self.forward_control.get()
             self.L = -self.forward_control.get()
@@ -322,35 +353,39 @@ class E160_graphics:
             self.last_rotate_control = self.rotate_control.get()
             self.last_forward_control = 0         
             self.environment.control_mode = "MANUAL CONTROL MODE"
-        
+
             # extract what the R and L motor signals should be
             self.R = self.rotate_control.get()
             self.L = -self.rotate_control.get()
         
         # if manual mode, set motors
         if self.environment.control_mode == "MANUAL CONTROL MODE":
+            for r in self.environment.robots:
+                r.cancel_path()
             # tell robot what the values should be
             robot = self.environment.robots[0]
             robot.set_manual_control_motors(self.R, self.L)
-        
-        
+
     def update_labels(self):
-        self.range_sensor_var_1.set("Range 1 (m):  " + str(self.environment.robots[0].range_measurements[0]))
+        self.range_sensor_var_1.set("Range 1 (m):  " + str(
+            self.environment.range_meas[0][0]))
         try:
             self.range_sensor_var_2.set(
-                "Range 2 (m):  " + str(self.environment.robots[
-                                       0].range_measurements[1]))
+                "Range 2 (m):  " + str(self.environment.range_meas[0][1]))
         except IndexError:
             self.range_sensor_var_2.set("Range 2 (m):  NaN")
 
         try:
-            self.range_sensor_var_3.set("Range 3 (m):  " + str(self.environment.robots[0].range_measurements[2]))
+            self.range_sensor_var_3.set("Range 3 (m):  " + str(
+                self.environment.range_meas[0][2]))
         except IndexError:
             self.range_sensor_var_3.set("Range 3 (m):  NaN")
             pass
                 
-        self.encoder_sensor_var_0.set("Encoder 0 (m):  " + str(self.environment.robots[0].encoder_measurements[0]))
-        self.encoder_sensor_var_1.set("Encoder 1 (m):  " + str(self.environment.robots[0].encoder_measurements[1]))
+        self.encoder_sensor_var_0.set("Encoder 0 (m):  " + str(
+            self.environment.encoder_meas[0][0]))
+        self.encoder_sensor_var_1.set("Encoder 1 (m):  " + str(
+            self.environment.encoder_meas[0][1]))
 
         self.x.set("X_est (m):  " + str(self.environment.robots[0].state_est.x))
         self.y.set("Y_est (m):  " + str(self.environment.robots[0].state_est.y))
@@ -369,14 +404,17 @@ class E160_graphics:
             self.draw_robot(r)     
         
         # draw particles
-        self.draw_particles()
+        self.draw_particles(0, "red")
+        self.draw_particles(1, "orange")
 
-        self.draw_est(self.environment.robots[0])
+        self.draw_est(0, "blue")
+        self.draw_est(1, "purple")
         # draw sensors
-        self.draw_sensors(self.environment.robots[0])
+        self.draw_sensors(0)
+        self.draw_sensors(1)
 
-        for i in self.environment.get_walls(0):
-            self.draw_wall(i)
+        if self.environment.robots[0].path is not None:
+            self.draw_path(self.environment.robots[0].path)
 
         # update the graphics
         self.tk.update()
