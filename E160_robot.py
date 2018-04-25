@@ -1,6 +1,7 @@
 
 from E160_state import *
 from E160_PF import E160_PF
+from color_tracking import cameraTracking
 import E160_rangeconv
 import math
 import datetime
@@ -32,6 +33,8 @@ class E160_robot:
         self.ID = self.address.encode().__str__()[-1]
         self.last_measurements = []
         self.robot_id = robot_id
+
+        self.camera = cameraTracking(robot_id+1)
         self.manual_control_left_motor = 0
         self.manual_control_right_motor = 0
         self.file_name = 'Log/Bot' + str(self.robot_id) + '_'\
