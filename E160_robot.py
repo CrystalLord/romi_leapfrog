@@ -1,6 +1,7 @@
 
 from E160_state import *
 from E160_PF import E160_PF
+from color_tracking import cameraTracking
 import E160_medianfilter
 import E160_rangeconv
 import math
@@ -33,6 +34,7 @@ class E160_robot:
         self.ID = self.address.encode().__str__()[-1]
         self.last_measurements = []
         self.robot_id = robot_id
+        self.camera = cameraTracking(robot_id+1)
         self.other_pair_id = other_pair_id
         self._manual_control_left_motor = 0
         self._manual_control_right_motor = 0
@@ -137,7 +139,6 @@ class E160_robot:
                     [[i[0]] for i in range_measurements],
                     self.robot_id
             )
-            pass
         else:
             self.state_est = self.environment.pf.LocalizeEstWithParticleFilter(
                 encoder_measurements,
@@ -159,9 +160,7 @@ class E160_robot:
         
         # determine new control signals
         self.R, self.L = self.update_control()
-
-        print("Robot id {}".format(self.robot_id))
-        print(self.R, self.L)
+        
         # send the control measurements to the robot
         self.send_control(self.R, self.L, deltaT)
 
@@ -172,7 +171,6 @@ class E160_robot:
             self.environment.xbee.tx(dest_addr=self.address, data=command)
 
             update = self.environment.xbee.wait_read_frame()
-
 
             data = update['rf_data'].decode().split(' ')[:-1]
             data = [int(x) for x in data]
@@ -401,9 +399,7 @@ class E160_robot:
             RPWM = int(abs(R))
             LPWM = int(abs(L))
             command = '$M ' + str(LDIR) + ' ' + str(LPWM) + ' ' + str(RDIR) + ' ' + str(RPWM) + '@'
-            print("Sending actual commands!")
             self.environment.xbee.tx(dest_addr = self.address, data = command)
-            print("Command sent to robot {}!".format(self.robot_id))
 
     def simulate_encoders(self, R, L, deltaT):
         last_r = self.last_simulated_encoder_R
@@ -417,16 +413,6 @@ class E160_robot:
         self.last_simulated_encoder_L = left_encoder_measurement
 
         return [left_encoder_measurement, right_encoder_measurement]
-
-    #def simulate_range_finder(self, states, sensorT):
-    #    """Simulate range readings, given a simulated ground truth state"""
-    #    p = self.environment.pf.Particle(((state.x, state.y, state.theta),
-    #                                      (0, 0, 0)), 0)
-    #    return self.environment.pf.FindMinWallDistance(
-    #        p,
-    #        self.environment.get_walls_leap(self.robot_id, p.states),
-    #        sensorT
-    #    )
 
     def make_headers(self):
         f = open(self.file_name, 'a+')
