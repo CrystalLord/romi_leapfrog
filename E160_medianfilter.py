@@ -7,7 +7,7 @@ class MedianFilter(object):
         self.window = np.zeros(window_size)
 
     def filter(self, new_input):
-        for i in range(len(self.window)):
+        for i in range(len(self.window)-1):
             self.window[i+1] = self.window[i]
         self.window[0] = new_input
         median = np.median(self.window)

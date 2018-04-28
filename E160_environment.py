@@ -16,11 +16,11 @@ class E160_environment:
 
         # set up walls, putting top left point first
         self.walls = []
-        #self.walls.append(E160_wall([-0.5, 0.3, -0.5, -0.3], "vertical"))
-        #self.walls.append(E160_wall([1, 0.8, 1, -0.3], "vertical"))
-        #self.walls.append(E160_wall([-0.4, 0.5, 0.4, 0.5], "horizontal"))
-        #self.walls.append(E160_wall([-0.4, 1, 1, 1], "horizontal"))
-        #self.walls.append(E160_wall([-1, 0.8, -1, -0.3], "vertical"))
+        self.walls.append(E160_wall([-0.5, 0.3, -0.5, -0.3], "vertical"))
+        self.walls.append(E160_wall([1, 0.8, 1, -0.3], "vertical"))
+        self.walls.append(E160_wall([-0.4, 0.5, 0.4, 0.5], "horizontal"))
+        self.walls.append(E160_wall([-0.4, 1, 1, 1], "horizontal"))
+        self.walls.append(E160_wall([-1, 0.8, -1, -0.3], "vertical"))
 
         # create vars for hardware vs simulation
         # "SIMULATION MODE" or "HARDWARE MODE"
@@ -30,25 +30,33 @@ class E160_environment:
 
         # setup xbee communication
         if (self.robot_mode == "HARDWARE MODE"):
-            self.serial_port = serial.Serial('COM9', 9600)
+            serial_port1 = serial.Serial('COM9', 9600)
             print(" Setting up serial port")
             try:
-                self.xbee = XBee(self.serial_port)
+                self.xbee = XBee(serial_port1)
             except:
                 print("Couldn't find the serial port")
-        
+
+            #serial_port2 = serial.Serial('COM5', 9600)
+            #print(" Setting up serial port")
+            #try:
+            #    self.xbee2 = XBee(serial_port2)
+            #except:
+            #    print("Couldn't find the serial port")
+
         # Setup the robots
 
         self.num_robots = 2
         self.robots = []
+        addresses = ['\x00\x0C', '\x00\x01']
         for i in range(self.num_robots):
             # TODO: assign different address to each bot
-            r = E160_robot(self, '\x00\x0C', i)
+            r = E160_robot(self, addresses[i], i)
             self.robots.append(r)
 
         # Pair the two robots up
-        self.robots[0].other_pair_id = 1
-        self.robots[1].other_pair_id = 0
+        #self.robots[0].other_pair_id = 1
+        #self.robots[1].other_pair_id = 0
 
         # Store the measurements of all robots here.
         self.range_meas = [[0] for _ in self.robots]
@@ -60,7 +68,8 @@ class E160_environment:
         self.pf = E160_PF.E160_PF(self, self.robots)
 
     def update_robots(self, deltaT):
-        
+
+        print("Getting sensors")
         # loop over all robots and update their state
         for i, r in enumerate(self.robots):
             
@@ -69,7 +78,6 @@ class E160_environment:
             self.encoder_meas[i] = encoder_meas
             self.range_meas[i] = range_meas
             self.bearing_from_other[r.other_pair_id] = camera_angle  
-    
         for r in self.robots:
             # This modifies self.last_encoder_meas
             r.update(deltaT)

@@ -200,9 +200,6 @@ class E160_graphics:
                                                      fill="red")
             self.path_points.append(new_point)
 
-    def get_inputs(self):
-        pass
-
     def draw_particles(self, robot_id, color="red"):
         numparticles = self.environment.pf.numParticles
         for i in range(numparticles):
@@ -290,7 +287,7 @@ class E160_graphics:
             # TODO: Temporary hack to show leapfrogging.
             if i == 0:
                 path = E160_leap.get_leap_path(self.environment.robots, i,
-                                               0.7, fidelity=3)
+                                               0.7, fidelity=6)
                 r.assign_path(path)
                 r.point_tracked = False
             if i == 1:
@@ -340,6 +337,7 @@ class E160_graphics:
         if abs(self.forward_control.get()-self.last_forward_control) > 0:
             self.rotate_control.set(0)       
             self.last_forward_control = self.forward_control.get()
+            print("LAST FORWARD: {}".format(self.last_forward_control))
             self.last_rotate_control = 0         
             self.environment.control_mode = "MANUAL CONTROL MODE"
 
@@ -362,8 +360,9 @@ class E160_graphics:
         if self.environment.control_mode == "MANUAL CONTROL MODE":
             for r in self.environment.robots:
                 r.cancel_path()
+            print("GUI R: {}, {}".format(self.R, self.L))
             # tell robot what the values should be
-            robot = self.environment.robots[0]
+            robot = self.environment.robots[1]
             robot.set_manual_control_motors(self.R, self.L)
 
     def update_labels(self):
@@ -419,11 +418,9 @@ class E160_graphics:
         # update the graphics
         self.tk.update()
 
-        # check for gui buttons
-        self.get_inputs()
-
         # send commands tp robots
         self.send_robot_commands()
+        print("Sent some commands")
 
         # check for quit
         if self.gui_stopped:

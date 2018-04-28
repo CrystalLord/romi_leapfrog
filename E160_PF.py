@@ -13,7 +13,7 @@ class E160_PF(object):
     def __init__(self, environment, robots):
         self.particles = []
         self.environment = environment
-        self.numParticles = 50
+        self.numParticles = 200
 
         # maybe should just pass in a robot class?
         self.FAR_READING = range2m(0)
@@ -24,7 +24,7 @@ class E160_PF(object):
         if environment.robot_mode == "HARDWARE MODE":
             self.IR_sigma = m2range(0.0039, scale=True)*10
         else:
-            self.IR_sigma = m2range(0.0039, scale=True)
+            self.IR_sigma = m2range(0.0039, scale=True)*5
         # Added by Jordan, odometry for distance
         # for each wheel
         self.odom_wheel_std = 0.6 #0.2 #0.3
@@ -38,16 +38,6 @@ class E160_PF(object):
         # DON'T CHANGE THIS
         #self.new_random_count = int(math.floor(self.numParticles *
          #                                      self.new_random_prop))
-
-        # define the sensor orientations
-        #self.sensor_orientation = [-math.pi/2, 0, math.pi/2] #[0] #[
-        # -math.pi/2,
-        #  0, math.pi/2] #
-        # orientations
-        #  of the sensors on robot
-
-        # initialize the current state
-        self.state = E160_state()
 
         # TODO: change this later
         self.map_maxX = 1.0
@@ -70,6 +60,7 @@ class E160_PF(object):
             #p = self.Particle(0.0, 0.0, 0.0, 1.0/self.numParticles)
             #self.SetRandomStartPos(p)
             self.SetKnownStartPos(p, ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)))
+            #self.SetKnownStartPos(p, ((0.0, 0.0, 0.0),))
             self.particles.append(p)
 
     def GetPDF(self, mu, sd, x):
@@ -174,7 +165,6 @@ class E160_PF(object):
         diff_encoder_r = (encoder_measurements[1] -
                           last_encoder_measurements[1])
         encoder_mag = diff_encoder_r**2 + diff_encoder_l**2
-        #print(diff_e, diff_encoder_r)
         # Make sure we actually are moving
         if encoder_mag > 0.05:
             # Use approximate particle sampling method
@@ -238,8 +228,6 @@ class E160_PF(object):
         # Get the change in encoder readings.
         diff_encoder_l = encoder_measurements[0] - lastEncoderL
         diff_encoder_r = encoder_measurements[1] - lastEncoderR
-
-        #print("lastEncoderL {}".format(lastEncoderL))
 
         # Introduce noise into the wheel odometry.
         noise_l = np.random.normal(1, self.odom_wheel_std)
@@ -405,8 +393,6 @@ class E160_PF(object):
             newdist = min(seg1dist, seg2dist, seg3dist, seg4dist)
             if newdist < current_min:
                 current_min = newdist
-        #print("IN WALLS FINDER -----------")
-        #print("id: {}, current_min: {}".format())
         return current_min
 
     def FindWallDistance(self, particle, wall, sensorT, robot_id):
@@ -453,8 +439,22 @@ class E160_PF(object):
 
     def pointWithinViewport(self, x, y, partx, party, parttheta,
                             viewport, sensor_t):
-        dx = x - partx #particle.get_x()
-        dy = y - party #particle.y
+        """
+
+        Args:
+            x: point x
+            y: point y
+            partx: cone vertex x
+            party: cone vertex y
+            parttheta: cone vertex theta
+            viewport: List of two points which define a viewport cone
+            sensor_t: Sensor orientation
+
+        Returns:
+
+        """
+        dx = x - partx
+        dy = y - party
         theta = parttheta #particle.heading
         point_angle = self.angleDiff(math.atan2(dy, dx))
         view1_angle = math.atan2(viewport[1] - party, viewport[0] -

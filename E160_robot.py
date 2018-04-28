@@ -2,6 +2,7 @@
 from E160_state import *
 from E160_PF import E160_PF
 from color_tracking import cameraTracking
+import E160_medianfilter
 import E160_rangeconv
 import math
 import datetime
@@ -35,8 +36,8 @@ class E160_robot:
         self.robot_id = robot_id
         self.camera = cameraTracking(robot_id+1)
         self.other_pair_id = other_pair_id
-        self.manual_control_left_motor = 0
-        self.manual_control_right_motor = 0
+        self._manual_control_left_motor = 0
+        self._manual_control_right_motor = 0
         self.file_name = 'Log/Bot' + str(self.robot_id) + '_'\
             + datetime.datetime.now()\
             .replace(microsecond=0)\
@@ -81,6 +82,8 @@ class E160_robot:
         self.is_following_path = False
         self.is_rotation_tracking = False
         self.use_full_path_distance = False
+        self.use_median_filter = True
+        self.median_filter = E160_medianfilter.MedianFilter(3)
         #self.points = [[0.2,-0.1,-1.57]]
                       # [0.0, 0.0,0.0],
                       # [0.20,0.0,1.57], 
@@ -130,11 +133,12 @@ class E160_robot:
 
         # localize with particle filter
         if self.environment.robot_mode == "HARDWARE MODE":
-            self.state_est = self.environment.pf.LocalizeEstWithParticleFilter(
-                encoder_measurements,
-                last_encoder_measurements,
-                [[i[0]] for i in range_measurements],
-                self.robot_id
+            self.state_est =\
+                self.environment.pf.LocalizeEstWithParticleFilter(
+                    encoder_measurements,
+                    last_encoder_measurements,
+                    [[i[0]] for i in range_measurements],
+                    self.robot_id
             )
         else:
             #print("range_measurements: {}".format(range_measurements))
@@ -166,10 +170,10 @@ class E160_robot:
         
         if self.environment.robot_mode == "HARDWARE MODE":
             command = '$S @'
-            self.environment.xbee.tx(dest_addr = self.address, data = command)
-            
+            self.environment.xbee.tx(dest_addr=self.address, data=command)
+
             update = self.environment.xbee.wait_read_frame()
-            
+
             data = update['rf_data'].decode().split(' ')[:-1]
             data = [int(x) for x in data]
             # We flip these because the robot is driving backwards technically.
@@ -193,15 +197,15 @@ class E160_robot:
             range_measurements = list(map(E160_rangeconv.m2range,
                                           range_measurements))
             camera_angle = 0
+        if self.use_median_filter:
+            range_measurements = [self.median_filter.filter(x)
+                                  for x in range_measurements]
         return encoder_measurements, range_measurements, camera_angle
 
     def localize(self, state_est, delta_s, delta_theta):
         # New lab 4 state estimate function. We must be given delta_s and
         # delta_theta now.
         state_est = self.update_state(state_est, delta_s, delta_theta)
-        #delta_s, delta_theta = self.update_odometry(encoder_measurements)
-        #state_est = self.update_state(state_est, delta_s, delta_theta)
-
         return state_est
     
     def angle_wrap(self, a):
@@ -219,13 +223,8 @@ class E160_robot:
         desiredWheelSpeedL = 0
 
         if self.environment.control_mode == "MANUAL CONTROL MODE":
-            desiredWheelSpeedR = self.manual_control_right_motor
-            desiredWheelSpeedL = self.manual_control_left_motor
-            if desiredWheelSpeedL > 0:
-                print(self.robot_id)
-                print(self)
-                print(self.environment.robots)
-                print("-----------------")
+            desiredWheelSpeedR = self._manual_control_right_motor
+            desiredWheelSpeedL = self._manual_control_left_motor
         elif self.environment.control_mode == "AUTONOMOUS CONTROL MODE":
             if self.is_following_path:
                 # Follow the entire path
@@ -404,7 +403,6 @@ class E160_robot:
                 RDIR = 1
             RPWM = int(abs(R))
             LPWM = int(abs(L))
-
             command = '$M ' + str(LDIR) + ' ' + str(LPWM) + ' ' + str(RDIR) + ' ' + str(RPWM) + '@'
             self.environment.xbee.tx(dest_addr = self.address, data = command)
 
@@ -420,16 +418,6 @@ class E160_robot:
         self.last_simulated_encoder_L = left_encoder_measurement
 
         return [left_encoder_measurement, right_encoder_measurement]
-
-    def simulate_range_finder(self, states, sensorT):
-        """Simulate range readings, given a simulated ground truth state"""
-        p = self.environment.pf.Particle(((state.x, state.y, state.theta),
-                                          (0, 0, 0)), 0)
-        return self.environment.pf.FindMinWallDistance(
-            p,
-            self.environment.get_walls_leap(self.robot_id, p.states),
-            sensorT
-        )
 
     def make_headers(self):
         f = open(self.file_name, 'a+')
@@ -459,9 +447,9 @@ class E160_robot:
         f.close()
         
     def set_manual_control_motors(self, R, L):
-        self.manual_control_right_motor = int(R*256/100)
-        self.manual_control_left_motor = int(L*256/100)                                                         
-   
+        self._manual_control_right_motor = int(R*256/100)
+        self._manual_control_left_motor = int(L*256/100)
+
     def update_odometry(self, encoder_measurements, last_encoder_measurements):
         """From Lab 2, update the possible state from encoder measurements."""
         delta_s = 0
@@ -578,6 +566,6 @@ class E160_robot:
         to_angle = math.atan2(other_robot.state_est.y - self.state_est.y,
                               other_robot.state_est.x - self.state_est.x)
         delta_theta = self.angle_wrap(to_angle - self.state_est.theta)
-        des_w = delta_theta * self.rotate_gain
+        des_w = delta_theta * self.rotate_gain * 1.2
         des_v = 0
         return self.get_des_wheel(des_v, des_w)
