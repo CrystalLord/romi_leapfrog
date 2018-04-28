@@ -55,6 +55,7 @@ class E160_environment:
         self.encoder_meas = [[0, 0] for _ in self.robots]
         self.last_encoder_meas = [[0, 0] for _ in self.robots]
         self.state_odo = [E160_state() for _ in self.robots]
+        self.bearing_from_other = [0 for _ in self.robots]
 
         self.pf = E160_PF.E160_PF(self, self.robots)
 
@@ -64,13 +65,16 @@ class E160_environment:
         for i, r in enumerate(self.robots):
             
             # set the control actuation
-            encoder_meas, range_meas = r.update_encoders_and_ranges(deltaT)
+            encoder_meas, range_meas, camera_angle = r.update_encoders_and_ranges(deltaT)
             self.encoder_meas[i] = encoder_meas
             self.range_meas[i] = range_meas
-
+            self.bearing_from_other[r.other_pair_id] = camera_angle  
+    
         for r in self.robots:
             # This modifies self.last_encoder_meas
             r.update(deltaT)
+        
+        print(self.bearing_from_other)
 
 
     def log_data(self):
@@ -85,13 +89,13 @@ class E160_environment:
 
     def get_walls_leap(self, robot_id, particle_states):
         all_walls = [i for i in self.walls]  # Copy the walls.
-        print("Robot ID {}".format(robot_id))
+        #print("Robot ID {}".format(robot_id))
         for i, r in enumerate(self.robots):
             if i != robot_id:
                 e = E160_state()
                 e.set_from_tuple(particle_states[i])
-                print(particle_states)
-                print("Where {} thinks {} is: {}".format(robot_id, i, e))
+                #print(particle_states)
+                #print("Where {} thinks {} is: {}".format(robot_id, i, e))
                 radius = r.radius
                 new_wall_r = E160_wall([e.x+radius, e.y+radius, e.x+radius,
                                         e.y-radius], "vertical")
@@ -101,7 +105,7 @@ class E160_environment:
                                         e.y+radius], "horizontal")
                 new_wall_b = E160_wall([e.x-radius, e.y-radius, e.x+radius,
                                         e.y-radius], "horizontal")
-                print("new_wall_r {}".format(new_wall_r))
+                #print("new_wall_r {}".format(new_wall_r))
                 all_walls += [new_wall_r, new_wall_l, new_wall_t, new_wall_b]
         return all_walls
 
@@ -118,7 +122,7 @@ class E160_environment:
             temp_list.append((s.x, s.y, s.theta))
         p = self.pf.Particle(tuple(temp_list), weight=0)
         walls = self.get_walls_leap(robot_id, p.states)
-        print("WALLS: {}".format(walls))
+        #print("WALLS: {}".format(walls))
         return self.pf.FindMinWallDistance(
             p,
             walls,

@@ -99,9 +99,10 @@ class E160_robot:
         Returns:
             Tuple of (encoder measurements, range measurements)
         """
-        encoder_meas, range_meas = \
+        encoder_meas, range_meas, camera_angle = \
             self.update_sensor_measurements(delta_t)
-        return encoder_meas, range_meas
+        
+        return encoder_meas, range_meas, camera_angle
 
     def update(self, deltaT):
         # get sensor measurements
@@ -136,7 +137,7 @@ class E160_robot:
                 self.robot_id
             )
         else:
-            print("range_measurements: {}".format(range_measurements))
+            #print("range_measurements: {}".format(range_measurements))
             self.state_est = self.environment.pf.LocalizeEstWithParticleFilter(
                 encoder_measurements,
                 last_encoder_measurements,
@@ -174,6 +175,8 @@ class E160_robot:
             # We flip these because the robot is driving backwards technically.
             encoder_measurements = list(reversed(data[-2:]))
             range_measurements = data[:-2]
+
+            camera_angle = self.camera.getAngle()
             
         elif self.environment.robot_mode == "SIMULATION MODE":
             encoder_measurements = self.simulate_encoders(self.R, self.L,
@@ -189,7 +192,8 @@ class E160_robot:
                 range_measurements.append(new_reading)
             range_measurements = list(map(E160_rangeconv.m2range,
                                           range_measurements))
-        return encoder_measurements, range_measurements
+            camera_angle = 0
+        return encoder_measurements, range_measurements, camera_angle
 
     def localize(self, state_est, delta_s, delta_theta):
         # New lab 4 state estimate function. We must be given delta_s and

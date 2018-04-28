@@ -17,8 +17,8 @@ class cameraTracking:
         # define the lower and upper boundaries of the "green"
         # ball in the HSV color space, then initialize the
         # list of tracked points
-        self.redLower = (105, 38, 131)
-        self.redUpper = (201, 138, 255)
+        self.redLower = (89, 128, 60)
+        self.redUpper = (126, 255, 173)
 
         self.pts = deque(maxlen=64)
  
@@ -30,7 +30,7 @@ class cameraTracking:
  
         # resize the frame, blur it, and convert it to the HSV
         # color space
-        frame = imutils.resize(frame, width=600)
+        frame = imutils.resize(frame, width=1000)
         # blurred = cv2.GaussianBlur(frame, (11, 11), 0)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
  
@@ -82,8 +82,10 @@ class cameraTracking:
 
         # show the frame to our screen
         cv2.imshow("Frame", frame)
+        
+        print(center)
         if center != None:
-            return 0.0369*center[0] - 9.214
+            return 0.0234*center[0] - 12.4236
 
     def tearDown(self):
         self.camera.release()
@@ -92,7 +94,8 @@ class cameraTracking:
 if __name__ == "__main__":
     trackOne = cameraTracking(1)
     while (1):
-        print(trackOne.getAngle())
+        trackOne.getAngle()
+        #print(trackOne.getAngle())
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             break
