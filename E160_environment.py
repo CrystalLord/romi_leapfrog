@@ -47,7 +47,7 @@ class E160_environment:
         # Setup the robots
 
         self.num_robots = 2
-        self.robot_pos = [(0.35, 1, 0), (1, 0, 0)]
+        self.robot_pos = [(0, 0, 0), (0.35, 0, 0)]
         self.robots = []
         self.state_odo = [E160_state() for _ in range(self.num_robots)]
         addresses = ['\x00\x0C', '\x00\x01']

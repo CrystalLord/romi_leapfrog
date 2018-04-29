@@ -144,13 +144,13 @@ class E160_robot:
         if self.environment.robot_mode == "HARDWARE MODE":
             print("{}, {}".format(range_measurements[0][1],
                                   range_measurements[1][1]))
-            self.state_est =\
-                self.environment.pf.LocalizeEstWithParticleFilter(
-                    encoder_measurements,
-                    last_encoder_measurements,
-                    [[i[1]] for i in range_measurements],
-                    self.robot_id
-            )
+            self.state_est = self.environment.state_odo[self.robot_id] #\
+                #self.environment.pf.LocalizeEstWithParticleFilter(
+                #    encoder_measurements,
+                #    last_encoder_measurements,
+                #    [[i[1]] for i in range_measurements],
+                #    self.robot_id
+            #)
         else:
             #print("range_measurements: {}".format(range_measurements))
             self.state_est = self.environment.pf.LocalizeEstWithParticleFilter(
@@ -580,6 +580,12 @@ class E160_robot:
         to_angle = math.atan2(other_robot.state_est.y - self.state_est.y,
                               other_robot.state_est.x - self.state_est.x)
         delta_theta = self.angle_wrap(to_angle - self.state_est.theta)
-        des_w = delta_theta * self.rotate_gain * 1.2
+        des_w = -delta_theta * self.rotate_gain * 1.2
         des_v = 0
+        print("Delta {}, W: {}".format(delta_theta, des_w))
+
+        # TODO: Flip des_w if we are on a real robot. THIS IS A HACK.
+        if self.environment.mode == "HARDWARE MODE" and self.robot_id == 1:
+            # Flip rotations only for this one robot
+            des_w = -des_w
         return self.get_des_wheel(des_v, des_w)
