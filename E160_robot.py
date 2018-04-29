@@ -2,6 +2,7 @@
 from E160_state import *
 from E160_PF import E160_PF
 from color_tracking import cameraTracking
+
 import E160_medianfilter
 import E160_rangeconv
 import math
@@ -10,14 +11,19 @@ import time
 
 class E160_robot:
 
-    def __init__(self, environment, address, robot_id, other_pair_id=None):
+    def __init__(self, environment, address, robot_id, other_pair_id=None,
+                 position=None):
         self.debug = False
 
         self.environment = environment
         self.state_est = E160_state()
-        self.state_est.set_state(0,0,0)
         self.state_des = E160_state()
-        self.state_des.set_state(0, 0, 0)
+        if position is None:
+            self.state_est.set_state(0, 0, 0)
+            self.state_des.set_state(0, 0, 0)
+        else:
+            self.state_est.set_state(position[0], position[1], position[2])
+            self.state_des.set_state(position[0], position[1], position[2])
 
         # Where are we drawing the robot on the GUI?
         self.state_draw = E160_state()
@@ -60,7 +66,10 @@ class E160_robot:
 
         self.rotate_gain = 12
 
-        self.max_velocity = 1#0.05
+        if self.environment.robot_mode == "HARDWARE MODE":
+            self.max_velocity = 0.08
+        else:
+            self.max_velocity = 1
         self.max_angular_vel = 3
         self.point_tracked = True
         self.encoder_per_sec_to_rad_per_sec = 10
@@ -132,11 +141,13 @@ class E160_robot:
 
         # localize with particle filter
         if self.environment.robot_mode == "HARDWARE MODE":
+            print("{}, {}".format(range_measurements[0][1],
+                                  range_measurements[1][1]))
             self.state_est =\
                 self.environment.pf.LocalizeEstWithParticleFilter(
                     encoder_measurements,
                     last_encoder_measurements,
-                    [[i[0]] for i in range_measurements],
+                    [[i[1]] for i in range_measurements],
                     self.robot_id
             )
         else:
@@ -195,6 +206,7 @@ class E160_robot:
         if self.use_median_filter:
             range_measurements = [self.median_filter.filter(x)
                                   for x in range_measurements]
+        #print("Robot {}: {}".format(self.robot_id, range_measurements))
         return encoder_measurements, range_measurements
 
     def localize(self, state_est, delta_s, delta_theta):
@@ -382,6 +394,9 @@ class E160_robot:
                              /self.wheel_radius * -1
         desiredWheelSpeedL = 2*(-desV + desW*self.width) \
                              /self.wheel_radius
+        desiredWheelSpeedR, desiredWheelSpeedL = self.cap_wheels(
+            (desiredWheelSpeedR, desiredWheelSpeedL), self.max_velocity
+        )
         return desiredWheelSpeedR, desiredWheelSpeedL
 
     def send_control(self, R, L, deltaT):

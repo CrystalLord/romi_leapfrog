@@ -29,9 +29,7 @@ def main():
         if not graphics.update():
             break
         # update robots
-        print("Updated graphics")
         environment.update_robots(deltaT)
-        print("Updated robots")
 
         # log all the robot data
         environment.log_data()

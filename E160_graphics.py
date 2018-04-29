@@ -23,7 +23,8 @@ class E160_graphics:
         self.bottom_frame.pack(side = BOTTOM)
         
         self.scale = 200
-        self.canvas = Canvas(self.tk, width=self.environment.width*self.scale, height=self.scale* self.environment.height)
+        self.canvas = Canvas(self.tk, width=self.environment.width*self.scale,
+                             height=self.scale*self.environment.height)
         self.tk.title("E160 - Autonomous Robot Navigation")
         self.canvas.bind("<Button-1>", self.callback)
         self.canvas.pack()
@@ -83,27 +84,32 @@ class E160_graphics:
         self.x_label = Label(self.north_west_frame, textvariable = self.x).pack()
         self.y_label = Label(self.north_west_frame, textvariable = self.y).pack()
         self.theta_label = Label(self.north_west_frame, textvariable = self.theta).pack()
-       
+
         # add text entry for desired X
         #self.x_des_label = Label(self.north_frame, text="X desired")
         #self.x_des_label.pack()
         self.x_des_entry = Entry(self.north_west_frame, justify = RIGHT)
-        self.x_des_entry.insert(10,"0.0")
+        self.x_des_entry.insert(10, "0.0")
         self.x_des_entry.pack()
         
         # add text entry for desired Y
         #self.y_des_label = Label(self.north_west_frame, text="Y desired")
         #self.y_des_label.pack()
         self.y_des_entry = Entry(self.north_west_frame, justify = RIGHT)
-        self.y_des_entry.insert(10,"0.0")
+        self.y_des_entry.insert(10, "0.0")
         self.y_des_entry.pack()
         
         # add text entry for desired Theta
         #self.theta_des_label = Label(self.north_west_frame, text="Theta desired")
         #self.theta_des_label.pack()
         self.theta_des_entry = Entry(self.north_west_frame, justify = RIGHT)
-        self.theta_des_entry.insert(10,"0.0")
+        self.theta_des_entry.insert(10, "0.0")
         self.theta_des_entry.pack()
+
+        # Setup leap id field
+        self.leap_id_entry = Entry(self.north_west_frame, justify=RIGHT)
+        self.leap_id_entry.insert(10, "0")
+        self.leap_id_entry.pack()
 
 
         # initilize particle representation
@@ -121,7 +127,6 @@ class E160_graphics:
         self.sensor_rays = [[self.canvas.create_line(0, 0, 0, 0, fill='black')
                             for q in self.environment.range_meas[0]]
                             for r in self.environment.robots]
-        print("INIT {}".format(self.sensor_rays))
         self.path_points = []
 
         # =====================================================================
@@ -132,6 +137,9 @@ class E160_graphics:
         # Lengths
         self.headinglen = 0.1
         self.sensor_color = "purple"
+
+        # ====================================================================
+        # Draw the stuffs initially!
 
         # draw static environment
         for w in self.environment.walls:
@@ -278,19 +286,23 @@ class E160_graphics:
         self.last_rotate_control = 0
         self.R = 0
         self.L = 0
-        
+
+        leaping_robot_id = int(self.leap_id_entry.get())
+
         # draw robots
         for i, r in enumerate(self.environment.robots):
             x_des = float(self.x_des_entry.get())
             y_des = float(self.y_des_entry.get())
             theta_des = float(self.theta_des_entry.get())
             # TODO: Temporary hack to show leapfrogging.
-            if i == 0:
+            if i == leaping_robot_id:
                 path = E160_leap.get_leap_path(self.environment.robots, i,
                                                0.7, fidelity=6)
                 r.assign_path(path)
                 r.point_tracked = False
-            if i == 1:
+                r.is_rotation_tracking = False
+            else:
+                r.cancel_path()
                 r.is_rotation_tracking = True
             #r.state_des.set_state(x_des,y_des,theta_des)
 
@@ -312,10 +324,8 @@ class E160_graphics:
         self.gui_stopped = True
     
     def reset(self):
-        for r in self.environment.robots:
-            r.state_odo.set_state(0,0,0) 
-        self.environment.pf.InitializeParticles()
- 
+        self.environment.reset()
+
     def callback(self, event):
         desired_points = self.reverse_scale_points([float(event.x), float(event.y)], self.scale)
         robot = self.environment.robots[0]
@@ -323,22 +333,11 @@ class E160_graphics:
         print("New desired robot state", robot.state_des.x, robot.state_des.y)
         
     def send_robot_commands(self):
-
-        #if self.forward_c != 0:
-        #    self.L = self.forward_c
-        #    self.R = self.forward_c
-        #    return
-        #elif self.turn_c != 0:
-        #    self.L = -self.turn_c
-        #    self.R = self.turn_c
-        #    return
-
         # check to see if forward slider has changed
         if abs(self.forward_control.get()-self.last_forward_control) > 0:
             self.rotate_control.set(0)       
             self.last_forward_control = self.forward_control.get()
-            print("LAST FORWARD: {}".format(self.last_forward_control))
-            self.last_rotate_control = 0         
+            self.last_rotate_control = 0
             self.environment.control_mode = "MANUAL CONTROL MODE"
 
             # extract what the R and L motor signals should be
@@ -360,7 +359,6 @@ class E160_graphics:
         if self.environment.control_mode == "MANUAL CONTROL MODE":
             for r in self.environment.robots:
                 r.cancel_path()
-            print("GUI R: {}, {}".format(self.R, self.L))
             # tell robot what the values should be
             robot = self.environment.robots[1]
             robot.set_manual_control_motors(self.R, self.L)
@@ -394,7 +392,7 @@ class E160_graphics:
         
     # called at every iteration of main loop
     def update(self):
-        
+
         # update gui labels
         self.update_labels()
         
@@ -420,7 +418,6 @@ class E160_graphics:
 
         # send commands tp robots
         self.send_robot_commands()
-        print("Sent some commands")
 
         # check for quit
         if self.gui_stopped:

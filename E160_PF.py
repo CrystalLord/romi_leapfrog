@@ -59,7 +59,7 @@ class E160_PF(object):
                               weight=1/self.numParticles)
             #p = self.Particle(0.0, 0.0, 0.0, 1.0/self.numParticles)
             #self.SetRandomStartPos(p)
-            self.SetKnownStartPos(p, ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)))
+            self.SetKnownStartPos(p, self.environment.robot_pos)
             #self.SetKnownStartPos(p, ((0.0, 0.0, 0.0),))
             self.particles.append(p)
 
