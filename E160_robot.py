@@ -40,7 +40,6 @@ class E160_robot:
         self.ID = self.address.encode().__str__()[-1]
         self.last_measurements = []
         self.robot_id = robot_id
-        self.camera = cameraTracking(robot_id+1)
         self.other_pair_id = other_pair_id
         self._manual_control_left_motor = 0
         self._manual_control_right_motor = 0
@@ -68,6 +67,7 @@ class E160_robot:
 
         if self.environment.robot_mode == "HARDWARE MODE":
             self.max_velocity = 0.08
+            self.camera = cameraTracking(robot_id+1)
         else:
             self.max_velocity = 1
         self.max_angular_vel = 3
@@ -114,8 +114,7 @@ class E160_robot:
         """
         encoder_meas, range_meas, camera_angle = \
             self.update_sensor_measurements(delta_t)
-        #if self.robot_id == 0
-            #print(range_meas[1])
+
         return encoder_meas, range_meas, camera_angle
 
     def update(self, deltaT):
@@ -128,6 +127,7 @@ class E160_robot:
 
         encoder_measurements = self.environment.encoder_meas[self.robot_id]
         range_measurements = self.environment.range_meas
+        bearing_from_other = self.environment.bearing_from_other
         # Retrieve the
         last_encoder_measurements =\
             self.environment.last_encoder_meas[self.robot_id]
@@ -149,6 +149,7 @@ class E160_robot:
                     encoder_measurements,
                     last_encoder_measurements,
                     [[i[1]] for i in range_measurements],
+                    bearing_from_other,
                     self.robot_id
                 )
         else:
@@ -157,6 +158,7 @@ class E160_robot:
                 encoder_measurements,
                 last_encoder_measurements,
                 range_measurements,
+                bearing_from_other,
                 self.robot_id
             )
 
@@ -208,13 +210,13 @@ class E160_robot:
             range_measurements = list(map(E160_rangeconv.m2range,
                                           range_measurements))
             # TODO: Change this to the simulated camera angle.
-            camera_angle = 0
+            camera_angle = self.environment.simulate_camera_angle(
+                    self.robot_id,
+                    self.environment.state_odo)
+
         if self.use_median_filter:
-            print("Prior: {}".format(range_measurements))
             range_measurements = [self.median_filters[i].filter(x)
-                                  for i, x in
-                                  enumerate(range_measurements)]
-            print("Filter: {}".format(range_measurements))
+                                  for i, x in enumerate(range_measurements)]
         return encoder_measurements, range_measurements, camera_angle
 
     def localize(self, state_est, delta_s, delta_theta):
