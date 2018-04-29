@@ -43,11 +43,6 @@ class E160_robot:
         self.other_pair_id = other_pair_id
         self._manual_control_left_motor = 0
         self._manual_control_right_motor = 0
-        self.file_name = 'Log/Bot' + str(self.robot_id) + '_'\
-            + datetime.datetime.now()\
-            .replace(microsecond=0)\
-            .strftime('%y-%m-%d %H.%M.%S') + '.txt'
-        self.make_headers()
 
         self.encoder_resolution = 1440
 
@@ -92,7 +87,7 @@ class E160_robot:
         self.is_rotation_tracking = False
         self.use_full_path_distance = False
         self.use_median_filter = True
-        self.median_filters = [E160_medianfilter.MedianFilter(5) for _ in
+        self.median_filters = [E160_medianfilter.MedianFilter(4) for _ in
                                range(3)]
         #self.points = [[0.2,-0.1,-1.57]]
                       # [0.0, 0.0,0.0],
@@ -438,32 +433,33 @@ class E160_robot:
 
         return [left_encoder_measurement, right_encoder_measurement]
 
-    def make_headers(self):
-        f = open(self.file_name, 'a+')
-        f.write('{0} {1:^1} {2:^1} {3:^1} {4:^1} \n'.format('R1', 'R2', 'R3', 'RW', 'LW'))
-        # Old Lab 3 log headers.
-        #f.write('{6} {0} {1:^1} {2:^1} {3:^1} {4:^1} {5:^1} \n'.format('X', 'Y', 'Theta', 'Des_X', 'Des_Y','Des_Theta', 'time'))
-        f.close()
+    #def make_headers(self):
+    #    f = open(self.file_name, 'a+')
+    #    f.write('{0} {4:^1} \n'
+    #            .format('Range_r1', 'range_r2', 'R3', 'RW', 'LW'))
+    #    # Old Lab 3 log headers.
+    #    f.write('{6} {0} {1:^1} {2:^1} {3:^1} {4:^1} {5:^1} \n'.format('X', 'Y', 'Theta', 'Des_X', 'Des_Y','Des_Theta', 'time'))
+    #    f.close()
 
 
         
-    def log_data(self):
-        f = open(self.file_name, 'a+')
-        
-        # edit this line to have data logging of the data you care about
-        #data = [str(x) for x in [1,2,3,4,5]]
-        # Old lab 3 log data.
-        state_odo = self.environment.get_odo(self.robot_id)
-        data = [str(x) for x in [time.time(), self.state_est.x,
-                                 self.state_est.y, self.state_est.theta,
-                                 state_odo.x, state_odo.y,
-                                 state_odo.theta,
-                                 self.environment.pf.particle_weight_sum,
-                                 self.environment.range_meas[self.robot_id],
-                                 self.environment.pf.numParticles]]
-        
-        f.write(' '.join(data) + '\n')
-        f.close()
+    # def log_data(self):
+    #    f = open(self.file_name, 'a+')
+    #
+    #    # edit this line to have data logging of the data you care about
+    #    #data = [str(x) for x in [1,2,3,4,5]]
+    #    # Old lab 3 log data.
+    #    state_odo = self.environment.get_odo(self.robot_id)
+    #    data = [str(x) for x in [time.time(), self.state_est.x,
+    #                             self.state_est.y, self.state_est.theta,
+    #                             state_odo.x, state_odo.y,
+    #                             state_odo.theta,
+    #                             self.environment.pf.particle_weight_sum,
+    #                             self.environment.range_meas[self.robot_id],
+    #                             self.environment.pf.numParticles]]
+    #
+    #    f.write(' '.join(data) + '\n')
+    #    f.close()
         
     def set_manual_control_motors(self, R, L):
         self._manual_control_right_motor = int(R*256/100)

@@ -4,11 +4,18 @@ from E160_wall import *
 import E160_PF
 
 import serial
+import datetime
+import time
 from xbee import XBee
 
 class E160_environment:
     
     def __init__(self, mode="SIMULATION MODE"):
+
+        self.file_name = 'Log/All_Bots' '_' \
+                         + datetime.datetime.now() \
+                             .replace(microsecond=0) \
+                             .strftime('%y-%m-%d %H.%M.%S') + '.txt'
         #self.width = 2.0
         #self.height = 1.2
         self.width = 6.0
@@ -46,7 +53,7 @@ class E160_environment:
 
         # Setup the robots
 
-        self.num_robots = 2
+        self.num_robots = 1
         if self.num_robots == 1:
             self.robot_pos = [(0, 0, 0)]
         elif self.num_robots == 2:
@@ -73,6 +80,8 @@ class E160_environment:
 
         self.pf = E160_PF.E160_PF(self, self.robots)
 
+        self.make_header(self.num_robots)
+
     def update_robots(self, deltaT):
 
         # loop over all robots and update their state
@@ -83,6 +92,7 @@ class E160_environment:
                 r.update_encoders_and_ranges(deltaT)
             self.encoder_meas[i] = encoder_meas
             self.range_meas[i] = range_meas
+            print(range_meas)
             if r.other_pair_id is not None:
                 self.bearing_from_other[r.other_pair_id] = camera_angle
         for r in self.robots:
@@ -93,10 +103,7 @@ class E160_environment:
 
 
     def log_data(self):
-        
-        # loop over all robots and update their state
-        for r in self.robots:
-            r.log_data()
+        self._log_line(self.num_robots)
             
     def quit(self):
         self.xbee.halt()
@@ -171,3 +178,32 @@ class E160_environment:
         self.encoder_meas = [[0, 0] for _ in self.robots]
         self.last_encoder_meas = [[0, 0] for _ in self.robots]
         self.pf.InitializeParticles()
+
+    def make_header(self, num_robots):
+        mesg = ""
+        for i in range(num_robots):
+            mesg += "Range_r{},".format(i)
+            mesg += "R_enc_r{},".format(i)
+            mesg += "L_enc_r{},".format(i)
+            mesg += "x_r{},".format(i)
+            mesg += "y_r{},".format(i)
+            mesg += "theta_r{},".format(i)
+
+        mesg += "time\n"
+        f = open(self.file_name, 'a+')
+        f.write(mesg)
+        f.close()
+
+    def _log_line(self, num_robots):
+        mesg = ""
+        for i in range(num_robots):
+            mesg += str(self.range_meas[i][0]) + ","
+            mesg += str(self.encoder_meas[i][0]) + ","
+            mesg += str(self.encoder_meas[i][1]) + ","
+            mesg += str(self.robots[i].state_est.x) + ","
+            mesg += str(self.robots[i].state_est.y) + ","
+            mesg += str(self.robots[i].state_est.theta) + ","
+        mesg += str(time.time()) + "\n"
+        f = open(self.file_name, 'a+')
+        f.write(mesg)
+        f.close()

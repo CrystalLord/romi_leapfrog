@@ -261,7 +261,7 @@ class E160_graphics:
         est = robot.state_est
         s = self.environment.range_meas[robot_id]
         for i, o in enumerate(robot.sensor_orientation):
-            ran = E160_rangeconv.range2m(s[i])  # Get real world ranges
+            ran = E160_rangeconv.range2m(s[i], robot_id)
             self.canvas.delete(self.sensor_rays[robot_id][i])
             inter_x = math.cos(o+est.theta)*ran + est.x
             inter_y = math.sin(o+est.theta)*ran + est.y
@@ -402,13 +402,15 @@ class E160_graphics:
         
         # draw particles
         self.draw_particles(0, "red")
-        #self.draw_particles(1, "orange")
 
         self.draw_est(0, "blue")
-        #self.draw_est(1, "purple")
+
         # draw sensors
         self.draw_sensors(0)
-        #self.draw_sensors(1)
+        if self.environment.num_robots > 1:
+            self.draw_particles(1, "orange")
+            self.draw_est(1, "purple")
+            self.draw_sensors(1)
 
         if self.environment.robots[0].path is not None:
             self.draw_path(self.environment.robots[0].path)

@@ -15,16 +15,13 @@ class E160_PF(object):
         self.environment = environment
         self.numParticles = 200
 
-        # maybe should just pass in a robot class?
-        self.FAR_READING = range2m(0)
-
         self.robots = robots
 
         # PF parameters
         if environment.robot_mode == "HARDWARE MODE":
-            self.IR_sigma = m2range(0.0039, scale=True)*100
+            self.IR_sigma = [m2range(0.0039, 0, scale=True)*100]
         else:
-            self.IR_sigma = m2range(0.0039, scale=True)*5
+            self.IR_sigma = [m2range(0.0039, 0, scale=True)*5]
         # Added by Jordan, odometry for distance
         # for each wheel
         self.odom_wheel_std = 0.2 #0.2 #0.3
@@ -311,13 +308,13 @@ class E160_PF(object):
         distance_sensor_prob = 1
         for i in range(len(expected)):
             # Mean of distribution
-            mu = m2range(expected[i])
-            sd = self.IR_sigma
+            mu = m2range(expected[i], robot_id)
+            sd = self.IR_sigma[robot_id]
             distance_sensor = sensor_readings[i]
             # Probability density of particle given distance sensor
             addition = math.pow(self.GetPDF(mu, sd, distance_sensor),
                                 1/len(expected))
-            if mu < m2range(self.FAR_READING) + 5:
+            if mu < m2range(0, robot_id) + 5:
                 addition *= 0.25 #0.1
             distance_sensor_prob *= addition
 
@@ -332,12 +329,13 @@ class E160_PF(object):
 
         # Integrate camera readings into the weight.
         # Find the simulated camera angle of this robot from the other
-        simulated_bearing = self.FindCameraAngle(particle, robot_id^1)
+        if self.environment.num_robots > 1:
+            simulated_bearing = self.FindCameraAngle(particle, robot_id ^ 1)
 
-        if camera_bearing == simulated_bearing:
-            newWeight *= 1.25
-        else:
-            newWeight *= 0.75
+            if camera_bearing == simulated_bearing:
+                newWeight *= 1.25
+            else:
+                newWeight *= 0.75
 
         return newWeight
 
@@ -406,7 +404,7 @@ class E160_PF(object):
                 sensorT: orientation of the sensor on the robot
             Return:
                 distance to the closest wall' (float)'''
-        current_min = self.FAR_READING
+        current_min = m2range(0, robot_id)
         for w in walls:
             p = []
             for s in range(len(w.points)//2):
@@ -468,7 +466,7 @@ class E160_PF(object):
                 particle.get_theta(robot_id),
                 wall,
                 sensorT):
-            return self.FAR_READING
+            return m2range(0, robot_id)
         # Return the distance if we got the far reading.
         d = self.dist(px, py, x_cross, y_cross)
         return d
