@@ -114,6 +114,7 @@ class E160_PF(object):
                                       encoder_measurements,
                                       last_encoder_measurements,
                                       sensor_readings,
+                                      camera_bearing,
                                       robot_id,
                                       angle_reading=None):
         """" Localize the robot with particle filters. Call everything
@@ -137,6 +138,7 @@ class E160_PF(object):
             if self.environment.using_leapfrog:
                 self.particles[i].weight = self.CalculateWeight(
                     sensor_readings[0],
+                    camera_bearing[0],
                     self.environment.get_walls_leap(0,
                                                     self.particles[i].states),
                     i,
@@ -144,6 +146,7 @@ class E160_PF(object):
                 )
                 self.particles[i].weight += self.CalculateWeight(
                     sensor_readings[1],
+                    camera_bearing[1],
                     self.environment.get_walls_leap(1,
                                                     self.particles[i].states),
                     i,
@@ -152,6 +155,7 @@ class E160_PF(object):
             else:
                 self.particles[i].weight = self.CalculateWeight(
                     sensor_readings,
+                    camera_bearing,
                     self.environment.get_walls(0),
                     i,
                     self.environment.robots[0]
@@ -276,13 +280,14 @@ class E160_PF(object):
         #particle.y += del_s * math.sin(theta + 0.5*del_theta)
         #particle.heading = self.angleDiff(theta + del_theta)
 
-    def CalculateWeight(self, sensor_readings, walls, particle_index,
+    def CalculateWeight(self, sensor_readings,camera_bearing, walls, particle_index,
                         robot_id):
         '''Calculate the weight of a particular particle
             Args:
                 particle (E160_Particle): a given particle
                 sensor_readings ( [float, ...] ): readings from the IR sensors
                                                   for only this robot.
+                camera_bearing ( [float, ...]) : angle from camera of other robot
                 walls ([ [four doubles], ...] ): positions of the walls from
                                                  environment,
                                                  represented as 4 doubles
@@ -322,6 +327,16 @@ class E160_PF(object):
                 distance_sensor_prob = 0
 
         newWeight = distance_sensor_prob
+
+        # Integrate camera readings into the weight.
+        # Find the simulated camera angle of this robot from the other
+        simulated_bearing = self.FindCameraAngle(particle, robot_id^1)
+
+        if camera_bearing == simulated_bearing:
+            newWeight *= 1.25
+        else:
+            newWeight *= 0.75
+
         return newWeight
 
     def Resample(self):
@@ -361,6 +376,25 @@ class E160_PF(object):
                                  mode.get_theta(robot_id))
         return robot_state
 
+    def FindCameraAngle(self, particle, robot_id):
+        observer_state = robot_id
+        observed_state = robot_id^1
+    
+        x_diff = particle.get_x(observed_state) - particle.get_x(observer_state)
+        y_diff = particle.get_y(observed_state) - particle.get_y(observer_state)
+        
+        observed_angle = math.atan2(y_diff, x_diff)
+        lower_angle = observed_angle - 0.1745
+        upper_angle = observed_angle + 0.1745
+
+        if particle.get_theta(observer_state) < upper_angle and particle.get_theta(observer_state) > lower_angle:
+           camera_angle = 0
+        else:
+           camera_angle = None
+
+        return camera_angle
+    
+    
     def FindMinWallDistance(self, particle, walls, sensorT, robot_id):
         ''' Given a particle position, walls, and a sensor, find
             shortest distance to the wall

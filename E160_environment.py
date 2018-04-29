@@ -84,7 +84,7 @@ class E160_environment:
             # This modifies self.last_encoder_meas
             r.update(deltaT)
 
-        print("BEARING: {}".format(self.bearing_from_other))
+        #print("BEARING: {}".format(self.bearing_from_other))
 
 
     def log_data(self):
@@ -140,6 +140,27 @@ class E160_environment:
             robot_id
         )
 
+    def simulate_camera_angle(self, robot_id, states):
+        """Simulate camera angle readings, given simulated ground truth states.
+            robot_id is the observer_state
+        """
+        observer_state = states[robot_id]
+        observed_state = states[robot_id^1]
+
+        x_diff = observed_state.x - observer_state.x
+        y_diff = observed_state.y - observer_state.y 
+
+        observed_angle = math.atan2(y_diff, x_diff)
+        lower_angle = observed_angle - 0.1745
+        upper_angle = observed_angle + 0.1745
+
+        if observer_state.theta < upper_angle and observer_state.theta > lower_angle:
+           camera_angle = 0
+        else:
+           camera_angle = None     
+
+        return camera_angle
+ 
     def reset(self):
         for r in self.robots:
             r.cancel_path()
