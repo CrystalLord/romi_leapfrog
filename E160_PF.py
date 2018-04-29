@@ -22,12 +22,12 @@ class E160_PF(object):
 
         # PF parameters
         if environment.robot_mode == "HARDWARE MODE":
-            self.IR_sigma = m2range(0.0039, scale=True)*10
+            self.IR_sigma = m2range(0.0039, scale=True)*100
         else:
             self.IR_sigma = m2range(0.0039, scale=True)*5
         # Added by Jordan, odometry for distance
         # for each wheel
-        self.odom_wheel_std = 0.6 #0.2 #0.3
+        self.odom_wheel_std = 0.2 #0.2 #0.3
 
         self.particle_weight_sum = 0
 
@@ -142,13 +142,15 @@ class E160_PF(object):
                     i,
                     0
                 )
-                self.particles[i].weight += self.CalculateWeight(
-                    sensor_readings[1],
-                    self.environment.get_walls_leap(1,
-                                                    self.particles[i].states),
-                    i,
-                    1
-                )
+                if self.environment.num_robots == 2:
+                    self.particles[i].weight += self.CalculateWeight(
+                        sensor_readings[1],
+                        self.environment.get_walls_leap(
+                            1,
+                            self.particles[i].states),
+                        i,
+                        1
+                    )
             else:
                 self.particles[i].weight = self.CalculateWeight(
                     sensor_readings,

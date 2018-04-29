@@ -360,7 +360,7 @@ class E160_graphics:
             for r in self.environment.robots:
                 r.cancel_path()
             # tell robot what the values should be
-            robot = self.environment.robots[1]
+            robot = self.environment.robots[0]
             robot.set_manual_control_motors(self.R, self.L)
 
     def update_labels(self):
@@ -402,13 +402,13 @@ class E160_graphics:
         
         # draw particles
         self.draw_particles(0, "red")
-        self.draw_particles(1, "orange")
+        #self.draw_particles(1, "orange")
 
         self.draw_est(0, "blue")
-        self.draw_est(1, "purple")
+        #self.draw_est(1, "purple")
         # draw sensors
         self.draw_sensors(0)
-        self.draw_sensors(1)
+        #self.draw_sensors(1)
 
         if self.environment.robots[0].path is not None:
             self.draw_path(self.environment.robots[0].path)

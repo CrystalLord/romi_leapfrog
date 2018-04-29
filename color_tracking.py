@@ -22,7 +22,7 @@ class cameraTracking:
 
         self.pts = deque(maxlen=64)
  
-        self.camera = cv2.VideoCapture(0)
+        self.camera = cv2.VideoCapture(1)
  
     def getAngle(self):
         # grab the current frame
@@ -83,8 +83,7 @@ class cameraTracking:
         # show the frame to our screen
         cv2.imshow("Frame", frame)
         
-        print("CENTER: {}".format(center))
-        if center != None:
+        if center is not None:
             return 0.0234*center[0] - 12.4236
 
     def tearDown(self):

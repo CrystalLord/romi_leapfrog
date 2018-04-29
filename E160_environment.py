@@ -30,10 +30,10 @@ class E160_environment:
 
         # setup xbee communication
         if self.robot_mode == "HARDWARE MODE":
-            serial_port1 = serial.Serial('COM9', 9600)
+            self.serial = serial.Serial('COM9', 9600)
             print(" Setting up serial port")
             try:
-                self.xbee = XBee(serial_port1)
+                self.xbee = XBee(self.serial)
             except:
                 print("Couldn't find the serial port")
 
@@ -47,7 +47,10 @@ class E160_environment:
         # Setup the robots
 
         self.num_robots = 2
-        self.robot_pos = [(0, 0, 0), (0.35, 0, 0)]
+        if self.num_robots == 1:
+            self.robot_pos = [(0, 0, 0)]
+        elif self.num_robots == 2:
+            self.robot_pos = [(0, 0, 0), (0.35, 0, 0)]
         self.robots = []
         self.state_odo = [E160_state() for _ in range(self.num_robots)]
         addresses = ['\x00\x0C', '\x00\x01']
@@ -58,8 +61,9 @@ class E160_environment:
             self.state_odo[i].set_from_tuple(self.robot_pos[i])
 
         # Pair the two robots up
-        self.robots[0].other_pair_id = 1
-        self.robots[1].other_pair_id = 0
+        if self.num_robots == 2:
+            self.robots[0].other_pair_id = 1
+            self.robots[1].other_pair_id = 0
 
         # Store the measurements of all robots here.
         self.range_meas = [[0] for _ in self.robots]
@@ -79,12 +83,13 @@ class E160_environment:
                 r.update_encoders_and_ranges(deltaT)
             self.encoder_meas[i] = encoder_meas
             self.range_meas[i] = range_meas
-            self.bearing_from_other[r.other_pair_id] = camera_angle
+            if r.other_pair_id is not None:
+                self.bearing_from_other[r.other_pair_id] = camera_angle
         for r in self.robots:
             # This modifies self.last_encoder_meas
             r.update(deltaT)
 
-        print("BEARING: {}".format(self.bearing_from_other))
+        #print("BEARING: {}".format(self.bearing_from_other))
 
 
     def log_data(self):
@@ -99,13 +104,10 @@ class E160_environment:
 
     def get_walls_leap(self, robot_id, particle_states):
         all_walls = [i for i in self.walls]  # Copy the walls.
-        #print("Robot ID {}".format(robot_id))
         for i, r in enumerate(self.robots):
             if i != robot_id:
                 e = E160_state()
                 e.set_from_tuple(particle_states[i])
-                #print(particle_states)
-                #print("Where {} thinks {} is: {}".format(robot_id, i, e))
                 radius = r.radius
                 new_wall_r = E160_wall([e.x+radius, e.y+radius, e.x+radius,
                                         e.y-radius], "vertical")
