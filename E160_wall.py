@@ -5,7 +5,7 @@ class E160_wall:
         
         # set up walls
         self.slope = slope
-        self.radius = 0.003
+        self.radius = 0.006
         self.wall_points = wall_points
         
         # assume top point is first

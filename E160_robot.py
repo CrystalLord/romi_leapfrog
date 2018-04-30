@@ -61,7 +61,7 @@ class E160_robot:
         self.rotate_gain = 12
 
         if self.environment.robot_mode == "HARDWARE MODE":
-            self.max_velocity = 0.08
+            self.max_velocity = 0.05
             self.camera = cameraTracking(robot_id+1)
         else:
             self.max_velocity = 1
@@ -83,6 +83,7 @@ class E160_robot:
 
         # ADDED BY M SANGHEETHA NAIDU
         self.path = None
+        self.path_complete = True
         self.is_following_path = False
         self.is_rotation_tracking = False
         self.use_full_path_distance = False
@@ -186,7 +187,16 @@ class E160_robot:
             data = [int(x) for x in data]
             # We flip these because the robot is driving backwards technically.
             encoder_measurements = list(reversed(data[-2:]))
+            #if self.address == "\x00\x0C":
             range_measurements = data[:-2]
+            print(range_measurements)
+            #elif self.address == "\x00\x01":
+            #    range_measurements = data[:-2]
+            #    range_measurements = [range_measurements[1],
+            #                          range_measurements[0],
+            #                          range_measurements[2]]
+            #else:
+            #    raise ValueError("Unknown Robot Address. Change this.")
 
             camera_angle = self.camera.getAngle()
 
@@ -202,7 +212,8 @@ class E160_robot:
                     o
                 )
                 range_measurements.append(new_reading)
-            range_measurements = list(map(E160_rangeconv.m2range,
+            range_measurements = list(map(lambda x: E160_rangeconv.m2range(x,
+                                          self.robot_id),
                                           range_measurements))
             # TODO: Change this to the simulated camera angle.
             camera_angle = self.environment.simulate_camera_angle(
@@ -261,13 +272,16 @@ class E160_robot:
             and theta. Iteratively calls point_tracker_control() to take
             robot on path."""
         if len(self.path) == 0:
+            self.path_complete = True
+            self.cancel_path()
             return 0, 0
         else:
             self.state_des.x = self.path[0][0]
             self.state_des.y = self.path[0][1]
             self.state_des.theta = self.path[0][2]
             self.point_tracked = False
-            print("go to first point: ", self.state_des.x)
+            self.path_complete = False
+            #print("go to first point: ", self.state_des.x)
 
             if len(self.path) == 1:
                 desiredWheelSpeedR, desiredWheelSpeedL =\
@@ -318,20 +332,20 @@ class E160_robot:
         dirX = math.cos(curTheta)
         dirY = math.sin(curTheta)
         dot = self.norm_dotprod(dirX, dirY, delx, dely)
-        print("IN FRONT?: ", dot > 0)
+        #print("IN FRONT?: ", dot > 0)
 
         if abs(distTarget) < distThresh:
             onlyRotate = True
             if abs(deltheta) < thetaThresh:
-                print("TRACKED! --------")
+                #print("TRACKED! --------")
                 self.point_tracked = True
         else:
             onlyRotate = False
 
-        print("distTarget      :", distTarget)
-        print("rho      :", rho)
-        print("deltheta :", math.degrees(deltheta))
-        print("thetaThresh :", math.degrees(thetaThresh))
+        #print("distTarget      :", distTarget)
+        #print("rho      :", rho)
+        #print("deltheta :", math.degrees(deltheta))
+        #print("thetaThresh :", math.degrees(thetaThresh))
 
         # If the desired point is not tracked yet, then track it
         if not self.point_tracked:
@@ -358,22 +372,26 @@ class E160_robot:
             # Compute the desired angular velocity.
             desW = alphaGain*alpha + betaGain*beta
 
-            print("alpha    :", math.degrees(alpha))
-            print("beta     :", math.degrees(beta))
+            #print("alpha    :", math.degrees(alpha))
+            #print("beta     :", math.degrees(beta))
 
             if onlyRotate:
-                print("ONLY ROTATING------")
+                #print("ONLY ROTATING------")
                 desW = deltheta * self.rotate_gain
                 desV = 0
 
             # Add nominal angular velocity
             #desW = desW + math.copysign(desW, 1) * rotNom
 
-            print("desW     :", desW)
-            print("desV     :", desV)
+            #print("desW     :", desW)
+            #print("desV     :", desV)
+
+            if (self.address == "\x00\x01" and self.environment.robot_mode ==
+                    "HARDWARE MODE"):
+                desW = -desW
 
             desiredWheelSpeedR, desiredWheelSpeedL = self.get_des_wheel(
-                desV, desW
+                desV, desW, self.max_velocity
             )
             #desiredWheelSpeedR = 2*(desV + desW*self.width) \
             #        /self.wheel_radius * -1
@@ -389,18 +407,18 @@ class E160_robot:
         desiredWheelSpeedR, desiredWheelSpeedL = self.cap_wheels(
             (desiredWheelSpeedR, desiredWheelSpeedL), self.max_velocity)
 
-        print("WR:{}, WL:{}".format(desiredWheelSpeedR, desiredWheelSpeedL))
-        print("-----------")
+        #print("WR:{}, WL:{}".format(desiredWheelSpeedR, desiredWheelSpeedL))
+        #print("-----------")
 
         return desiredWheelSpeedR, desiredWheelSpeedL
 
-    def get_des_wheel(self, desV, desW):
+    def get_des_wheel(self, desV, desW, max_v):
         desiredWheelSpeedR = 2*(desV + desW*self.width) \
                              /self.wheel_radius * -1
         desiredWheelSpeedL = 2*(-desV + desW*self.width) \
                              /self.wheel_radius
         desiredWheelSpeedR, desiredWheelSpeedL = self.cap_wheels(
-            (desiredWheelSpeedR, desiredWheelSpeedL), self.max_velocity
+            (desiredWheelSpeedR, desiredWheelSpeedL), max_v
         )
         return desiredWheelSpeedR, desiredWheelSpeedL
 
@@ -560,6 +578,7 @@ class E160_robot:
 
     def cancel_path(self):
         self.path = None
+        self.path_complete = True
         self.is_following_path = False
 
     def length_along_path(self):
@@ -583,11 +602,11 @@ class E160_robot:
         delta_theta = self.angle_wrap(to_angle - self.state_est.theta)
         des_w = delta_theta * self.rotate_gain * 0.6
         des_v = 0
-        print("Delta {}, W: {}".format(delta_theta, des_w))
+        #print("Delta {}, W: {}".format(delta_theta, des_w))
 
         # TODO: Flip des_w if we are on a real robot. THIS IS A HACK.
         if (self.environment.robot_mode == "HARDWARE MODE"
-                and self.robot_id == 1):
+                and self.address == "\x00\x01"):
             # Flip rotations only for this one robot
             des_w = -des_w
-        return self.get_des_wheel(des_v, des_w)
+        return self.get_des_wheel(des_v, des_w, self.max_velocity)

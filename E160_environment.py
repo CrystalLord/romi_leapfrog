@@ -11,11 +11,6 @@ from xbee import XBee
 class E160_environment:
     
     def __init__(self, mode="SIMULATION MODE"):
-
-        self.file_name = 'Log/All_Bots' '_' \
-                         + datetime.datetime.now() \
-                             .replace(microsecond=0) \
-                             .strftime('%y-%m-%d %H.%M.%S') + '.txt'
         #self.width = 2.0
         #self.height = 1.2
         self.width = 6.0
@@ -23,11 +18,11 @@ class E160_environment:
 
         # set up walls, putting top left point first
         self.walls = []
-        self.walls.append(E160_wall([-0.5, 0.3, -0.5, -0.3], "vertical"))
-        self.walls.append(E160_wall([1, 0.8, 1, -0.3], "vertical"))
-        self.walls.append(E160_wall([-0.4, 0.5, 0.4, 0.5], "horizontal"))
-        self.walls.append(E160_wall([-0.4, 1, 1, 1], "horizontal"))
-        self.walls.append(E160_wall([-1, 0.8, -1, -0.3], "vertical"))
+        #self.walls.append(E160_wall([-0.5, 0.3, -0.5, -0.3], "vertical"))
+        #self.walls.append(E160_wall([1, 0.8, 1, -0.3], "vertical"))
+        self.walls.append(E160_wall([0, 1, 15, 1], "horizontal"))
+        self.walls.append(E160_wall([0, -1, 15, -1], "horizontal"))
+        #self.walls.append(E160_wall([-1, 0.8, -1, -0.3], "vertical"))
 
         # create vars for hardware vs simulation
         # "SIMULATION MODE" or "HARDWARE MODE"
@@ -38,9 +33,10 @@ class E160_environment:
         # setup xbee communication
         if self.robot_mode == "HARDWARE MODE":
             self.serial = serial.Serial('COM9', 9600)
-            print(" Setting up serial port")
+            print("Setting up serial port")
             try:
                 self.xbee = XBee(self.serial)
+                print("Found Computer XBee")
             except:
                 print("Couldn't find the serial port")
 
@@ -53,11 +49,17 @@ class E160_environment:
 
         # Setup the robots
 
-        self.num_robots = 1
+        self.file_name = 'Log/{}_All_Bots' '_' \
+                         + datetime.datetime.now() \
+                             .replace(microsecond=0) \
+                             .strftime('%y-%m-%d %H.%M.%S') + '.txt'
+        self.file_name = self.file_name.format(self.robot_mode)
+
+        self.num_robots = 2
         if self.num_robots == 1:
             self.robot_pos = [(0, 0, 0)]
         elif self.num_robots == 2:
-            self.robot_pos = [(0, 0, 0), (0.35, 0, 0)]
+            self.robot_pos = [(0.5, 0, 0), (0, 0, 0)]
         self.robots = []
         self.state_odo = [E160_state() for _ in range(self.num_robots)]
         addresses = ['\x00\x0C', '\x00\x01']
@@ -86,15 +88,14 @@ class E160_environment:
 
         # loop over all robots and update their state
         for i, r in enumerate(self.robots):
-            
             # set the control actuation
             encoder_meas, range_meas, camera_angle =\
                 r.update_encoders_and_ranges(deltaT)
             self.encoder_meas[i] = encoder_meas
             self.range_meas[i] = range_meas
-            print(range_meas)
             if r.other_pair_id is not None:
                 self.bearing_from_other[r.other_pair_id] = camera_angle
+                #print("Robot {} found... {}".format(i, camera_angle))
         for r in self.robots:
             # This modifies self.last_encoder_meas
             r.update(deltaT)
@@ -185,9 +186,13 @@ class E160_environment:
             mesg += "Range_r{},".format(i)
             mesg += "R_enc_r{},".format(i)
             mesg += "L_enc_r{},".format(i)
+            mesg += "x_odo_r{},".format(i)
+            mesg += "y_odo_r{},".format(i)
+            mesg += "theta_odo_r{},".format(i)
             mesg += "x_r{},".format(i)
             mesg += "y_r{},".format(i)
             mesg += "theta_r{},".format(i)
+            mesg += "bearing_r{},".format(i)
 
         mesg += "time\n"
         f = open(self.file_name, 'a+')
@@ -200,9 +205,13 @@ class E160_environment:
             mesg += str(self.range_meas[i][0]) + ","
             mesg += str(self.encoder_meas[i][0]) + ","
             mesg += str(self.encoder_meas[i][1]) + ","
+            mesg += str(self.state_odo[i].x) + ","
+            mesg += str(self.state_odo[i].y) + ","
+            mesg += str(self.state_odo[i].theta) + ","
             mesg += str(self.robots[i].state_est.x) + ","
             mesg += str(self.robots[i].state_est.y) + ","
             mesg += str(self.robots[i].state_est.theta) + ","
+            mesg += str(self.bearing_from_other[i]) + ","
         mesg += str(time.time()) + "\n"
         f = open(self.file_name, 'a+')
         f.write(mesg)

@@ -21,8 +21,16 @@ class cameraTracking:
         self.redUpper = (126, 255, 173)
 
         self.pts = deque(maxlen=64)
- 
-        self.camera = cv2.VideoCapture(1)
+
+        print("Connecting Camera {}...".format(cameraNum))
+        flip_cameras = True
+        if flip_cameras:
+            if cameraNum == 1:
+                cameraNum = 2
+            elif cameraNum == 2:
+                cameraNum = 1
+
+        self.camera = cv2.VideoCapture(cameraNum)
  
     def getAngle(self):
         # grab the current frame
@@ -30,6 +38,10 @@ class cameraTracking:
  
         # resize the frame, blur it, and convert it to the HSV
         # color space
+
+        if not grabbed:
+            raise ValueError("Camera Not Grabbed")
+
         frame = imutils.resize(frame, width=1000)
         # blurred = cv2.GaussianBlur(frame, (11, 11), 0)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)

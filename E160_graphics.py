@@ -2,6 +2,7 @@ import math
 from tkinter import *
 from E160_robot import *
 from PIL import Image, ImageTk
+import time
 from pynput.keyboard import Key, Listener
 
 import E160_rangeconv
@@ -22,7 +23,7 @@ class E160_graphics:
         self.bottom_frame = Frame(self.tk)
         self.bottom_frame.pack(side = BOTTOM)
         
-        self.scale = 200
+        self.scale = 100
         self.canvas = Canvas(self.tk, width=self.environment.width*self.scale,
                              height=self.scale*self.environment.height)
         self.tk.title("E160 - Autonomous Robot Navigation")
@@ -51,16 +52,20 @@ class E160_graphics:
         self.rotate_control.pack(side=RIGHT)
         
         # add track point button
-        self.track_point_button = Button(self.bottom_frame, text="Track Point", anchor="s", wraplength=100, command=self.track_point).pack()
+        self.track_point_button = Button(self.bottom_frame, text="Track Point", anchor="s", wraplength=100, command=self.track_point)
+        self.track_point_button.pack()
         
         # add stop button
-        self.track_point_button = Button(self.bottom_frame, text="Stop", anchor="s", wraplength=100, command=self.stop).pack()
+        self.stop_button = Button(self.bottom_frame, text="Stop", anchor="s",
+                               wraplength=100, command=self.stop).pack()
   
         # add stop button
-        self.track_point_button = Button(self.bottom_frame, text="Quit", anchor="s", wraplength=100, command=self.quit).pack()
+        self.quit_button = Button(self.bottom_frame, text="Quit", anchor="s",
+                               wraplength=100, command=self.quit).pack()
  
         # add reset button
-        self.track_point_button = Button(self.bottom_frame, text = "Reset", anchor = "s", wraplength = 100, command=self.reset).pack()
+        self.reset_button = Button(self.bottom_frame, text = "Reset", anchor =
+        "s", wraplength = 100, command=self.reset).pack()
  
         # add range sensor measurements
         self.range_sensor_var_1 = StringVar()
@@ -149,45 +154,49 @@ class E160_graphics:
         for r in self.environment.robots:
             self.initial_draw_robot(r)    
     
-    
+        self.count = 0
+        self.current_leap = 1
+
+        self.pressed_track = False
+        self.last_track_time = 0
 
     def draw_wall(self, wall):
-        
+
         wall_points = self.scale_points(wall.points, self.scale)
         wall.poly = self.canvas.create_polygon(wall_points, fill='black')
-        
+
     def scale_points(self, points, scale):
         scaled_points = []
         for i in range(len(points)-1):
-            
+
             if i % 2 == 0:
                 # for x values, just multiply times scale factor to go from meters to pixels
-                scaled_points.append(self.environment.width/2*scale + points[i]*scale)   
-                
+                scaled_points.append(self.environment.width/2*scale + points[i]*scale)
+
                 # only flip y for x,y points, not for circle radii
-                scaled_points.append(self.environment.height/2*scale - points[i+1]*scale)   
-                    
+                scaled_points.append(self.environment.height/2*scale - points[i+1]*scale)
+
         return scaled_points
-    
-    
+
+
     def reverse_scale_points(self, points, scale):
         reverse_scaled_points = []
         for i in range(len(points)-1):
-            
+
             if i % 2 == 0:
                 # for x values, just multiply times scale factor to go from meters to pixels
-                reverse_scaled_points.append(-self.environment.width/2 + points[i]/scale)   
-                
+                reverse_scaled_points.append(-self.environment.width/2 + points[i]/scale)
+
                 # only flip y for x,y points, not for circle radii
-                reverse_scaled_points.append(self.environment.height/2 - points[i+1]/scale)   
-                    
+                reverse_scaled_points.append(self.environment.height/2 - points[i+1]/scale)
+
         return reverse_scaled_points
-    
-    
+
+
     def initial_draw_robot(self, robot):
         # open image
         robot.robot_gif = Image.open("E160_robot_image.gif").convert('RGBA')
-        robot.robot_gif.thumbnail((50, 50), Image.ANTIALIAS)
+        robot.robot_gif.thumbnail((20, 20), Image.ANTIALIAS)
 
     def draw_robot(self, robot):
         # gif update
@@ -287,7 +296,7 @@ class E160_graphics:
         self.R = 0
         self.L = 0
 
-        leaping_robot_id = int(self.leap_id_entry.get())
+        leaping_robot_id = self.current_leap # int(self.leap_id_entry.get())
 
         # draw robots
         for i, r in enumerate(self.environment.robots):
@@ -297,7 +306,8 @@ class E160_graphics:
             # TODO: Temporary hack to show leapfrogging.
             if i == leaping_robot_id:
                 path = E160_leap.get_leap_path(self.environment.robots, i,
-                                               0.7, fidelity=6)
+                                               ((self.count+1)*0.5 + 0.5, 0),
+                                               fidelity=3)
                 r.assign_path(path)
                 r.point_tracked = False
                 r.is_rotation_tracking = False
@@ -305,6 +315,8 @@ class E160_graphics:
                 r.cancel_path()
                 r.is_rotation_tracking = True
             #r.state_des.set_state(x_des,y_des,theta_des)
+            self.pressed_track = True
+            self.last_track_time = time.time()
 
     def stop(self):
         self.environment.control_mode = "MANUAL CONTROL MODE"
@@ -392,7 +404,13 @@ class E160_graphics:
         
     # called at every iteration of main loop
     def update(self):
-
+        #print(self.pressed_track, self.last_track_time)
+        if self.pressed_track and time.time() - self.last_track_time > 0.25:
+            self.count += 1
+            self.current_leap = (self.current_leap + 1) % 2
+            print("Next Leap: {}".format(self.current_leap))
+            print("Next point: {}".format(self.count + 1))
+            self.pressed_track = False
         # update gui labels
         self.update_labels()
         
@@ -414,6 +432,9 @@ class E160_graphics:
 
         if self.environment.robots[0].path is not None:
             self.draw_path(self.environment.robots[0].path)
+
+        if self.environment.robots[1].path is not None:
+            self.draw_path(self.environment.robots[1].path)
 
         # update the graphics
         self.tk.update()

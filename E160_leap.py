@@ -35,7 +35,7 @@ class Ray(object):
         self.dir = [math.cos(new_angle), math.sin(new_angle)]
 
 
-def get_leap_path(robots, robot_to_move_id, distance, fidelity=4):
+def get_leap_path(robots, robot_to_move_id, des_point, fidelity=4):
     """
     Args:
         robots:
@@ -46,10 +46,12 @@ def get_leap_path(robots, robot_to_move_id, distance, fidelity=4):
         Returns a list of waypoints
     """
     robot = robots[robot_to_move_id]
-    other_robot = robots[(robot_to_move_id+1) % 2]
-    direction = [other_robot.state_est.x - robot.state_est.x,
-                 other_robot.state_est.y - robot.state_est.y]
+    #other_robot = robots[(robot_to_move_id+1) % 2]
+    direction = [des_point[0] - robot.state_est.x,
+                 des_point[1] - robot.state_est.y]
     ray = Ray([robot.state_est.x, robot.state_est.y], direction)
+    distance = math.sqrt((robot.state_est.x-des_point[0])**2 +
+                         (robot.state_est.y-des_point[1])**2)
     centre = ray.along(distance*0.5)
     arc_ray = Ray(centre, [-d for d in direction])
     track_points = []

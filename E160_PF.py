@@ -13,18 +13,20 @@ class E160_PF(object):
     def __init__(self, environment, robots):
         self.particles = []
         self.environment = environment
-        self.numParticles = 200
+        self.numParticles = 400
 
         self.robots = robots
 
         # PF parameters
         if environment.robot_mode == "HARDWARE MODE":
-            self.IR_sigma = [m2range(0.0039, 0, scale=True)*100]
+            self.IR_sigma = [m2range(0.0039, 0, scale=True)*50,
+                             m2range(0.0039, 1, scale=True)*50]
         else:
-            self.IR_sigma = [m2range(0.0039, 0, scale=True)*5]
+            self.IR_sigma = [m2range(0.0039, 0, scale=True)*5,
+                             m2range(0.0039, 1, scale=True)*5]
         # Added by Jordan, odometry for distance
         # for each wheel
-        self.odom_wheel_std = 0.2 #0.2 #0.3
+        self.odom_wheel_std = 0.4 #0.2 #0.3
 
         self.particle_weight_sum = 0
 
@@ -37,10 +39,10 @@ class E160_PF(object):
          #                                      self.new_random_prop))
 
         # TODO: change this later
-        self.map_maxX = 1.0
-        self.map_minX = -1.0
-        self.map_maxY = 1.0
-        self.map_minY = -1.0
+        self.map_maxX = 15
+        self.map_minX = -15
+        self.map_maxY = 2
+        self.map_minY = -2
         self.InitializeParticles()
         self.last_encoder_measurements = [0, 0]
 
@@ -326,7 +328,6 @@ class E160_PF(object):
                 distance_sensor_prob = 0
 
         newWeight = distance_sensor_prob
-
         # Integrate camera readings into the weight.
         # Find the simulated camera angle of this robot from the other
         if self.environment.num_robots > 1:

@@ -30,7 +30,6 @@ def main():
             break
         # update robots
         environment.update_robots(deltaT)
-
         # log all the robot data
         environment.log_data()
 
